@@ -1,12 +1,18 @@
-from typing import List
+from typing import List, Literal
 
 from pydantic import BaseModel, Field
 
+class Point(BaseModel):
+    x: int = Field(..., ge=0, le=1000)
+    y: int = Field(..., ge=0, le=1000)
+
 class Segment(BaseModel):
-    x_1: int = Field(description="X coordinate of the first point of the segment", ge=0, le=1000)
-    y_1: int = Field(description="Y coordinate of the first point of the segment", ge=0, le=1000)
-    x_2: int = Field(description="X coordinate of the second point of the segment", ge=0, le=1000)
-    y_2: int = Field(description="Y coordinate of the second point of the segment", ge=0, le=1000)
+    coord_1: Point
+    coord_2: Point
 
 class Room(BaseModel):
-    walls: List[Segment] = Field(description="Walls that make up a passage through the room.", min_length=20, max_length=100)
+    id: int = Field(description="Unique identifier for the room in the series")
+    walls: List[Segment] = Field(min_length=10, max_length=100, description="Walls making up the passage")
+
+class MapSequence(BaseModel):
+    rooms: List[Room] = Field(min_length=2, description="List of rooms forming a connected sequence")

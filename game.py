@@ -1,12 +1,14 @@
 import sys
 import time
 import math
+import json
 from typing import List
 
 import pygame
 from pygame.locals import *
 
-from main import ask_for_room
+from main import ask_for_map
+from infinite_temple.schema.room import MapSequence, Room, Segment, Point
 
 white = (255, 255, 255)
 red = (255, 0, 0)
@@ -42,16 +44,13 @@ class Timer:
 
 
 class Wall(pygame.sprite.Sprite):
-    def __init__(self, coord_1: vec, coord_2: vec):
+    def __init__(self, segment: Segment):
         pygame.sprite.Sprite.__init__(self)
 
-        self.coord_1 = coord_1
-        self.coord_2 = coord_2
+        self.coord_1 = vec(segment.coord_1.x, segment.coord_1.y)
+        self.coord_2 = vec(segment.coord_2.x, segment.coord_2.y)
         rads = math.atan2(self.coord_2.y - self.coord_1.y, self.coord_2.x - self.coord_1.x)
         self.angle = rads * (180 / math.pi)
-
-
-
         self.rect = surface.get_rect()
 
     def drawWall(self):
@@ -150,26 +149,44 @@ class Player(pygame.sprite.Sprite):
 
 
 
-P1 = Player(200, 200)
+P1 = Player(500, 500)
 
 all_sprites = pygame.sprite.Group()
 all_sprites.add(P1)
 
 walls_sprites = pygame.sprite.Group()
 
-print("Generating room....")
-room = ask_for_room()
-print("Generation complete")
+# print("Generating room....")
+# map = ask_for_map()
+# print("Generation complete")
 
-print(room)
-
-for segment in room.walls:
-    walls_sprites.add(Wall(vec(segment.x_1, segment.y_1), vec(segment.x_2, segment.y_2)))
-#test = Wall(vec(100, 100), vec(200, 150))
-
+def load_map_file(file: str):
+    with open(file, "r") as f:
+        map_json = json.loads(f.read())
+    return MapSequence.model_validate(map_json)
 
 
 
+def render_room(map_sequence: MapSequence, n: int):
+    room = map_sequence.rooms[n]
+
+    for segment in room.walls:
+        walls_sprites.add(Wall(segment))
+    # test = Wall(vec(100, 100), vec(200, 150))
+
+active_map = load_map_file("maps/map-1754775353.9665148.json")
+
+def get_start_room(map_sequence: MapSequence) -> Room:
+    entry_point = map_sequence.rooms[0].entry_point
+    starting_room_size = 200
+    starting_room = Room(
+        walls=[
+            Segment(coord_1=Point(entry_point.x - starting_room_size, entry_point.y - starting_room_size), coord_2=Point(entry_point.x + starting_room_size, entry_point.y - starting_room_size)),
+            Segment(coord_1=Point(entry_point.x + starting_room_size, entry_point.y - starting_room_size), coord_2=Point(entry_point.x + starting_room_size, entry_point.y + starting_room_size)),
+            Segment(coord_1=Point(entry_point.x + starting_room_size, entry_point.y + starting_room_size), coord_2=Point(entry_point.x - starting_room_size, entry_point.y + starting_room_size)),
+            Segment(coord_1=Point(entry_point.x - starting_room_size, entry_point.y + starting_room_size), coord_2=Point(entry_point.x - starting_room_size, entry_point.y - starting_room_size))
+        ]
+    )
 
 FramePerSec = pygame.time.Clock()
 
@@ -184,13 +201,27 @@ def collision_test(player, wall):
         return True
     return False
 
+room = 0
+
 while True:
     surface.fill((0, 0, 0))
     P1.updatePlayer()
     P1.drawPlayer()
-
+    render_room(active_map, room)
     for event in pygame.event.get():
         if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_q:
+                walls_sprites.empty()
+                if room + 1 > len(active_map.rooms) - 1:
+                    room = 0
+                else:
+                    room += 1
+            if event.key == pygame.K_w:
+                walls_sprites.empty()
+                if room - 1 < 0:
+                    room = len(active_map.rooms) - 1
+                else:
+                    room -= 1
             if event.key == pygame.K_UP:
                 P1.thrust = True
             if event.key == pygame.K_LEFT:

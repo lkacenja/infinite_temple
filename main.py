@@ -1,34 +1,75 @@
 import os
+
 import json
 import textwrap
+import time
 
-import llm
+from openai import OpenAI
+from dotenv import load_dotenv
 
-from infinite_temple.schema.room import Room
+from infinite_temple.schema.room import MapSequence
 
-model_name="qwen2.5:7b"
+model_name="gpt-5-nano"
 
-os.environ['OLLAMA_HOST'] = 'http://localhost:11434'
+load_dotenv()
 
-def ask_for_room():
-    model = llm.get_model(model_name)
+def ask_for_map():
+    client = OpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY"),
+    )
     prompt = textwrap.dedent("""
-        You are creating a flight corridor using line segments that form walls.
+        You are generating a sequence of connected rectangular rooms for a top-down grid-based game.
         
-        Create exactly TWO continuous walls that form a passage:
-        - Wall 1: Segments that connect end-to-end to form the left boundary
-        - Wall 2: Segments that connect end-to-end to form the right boundary
+        ## ROOM PROPERTIES
+        - Each room is exactly 1000x1000 units.
+        - Coordinates range from (0, 0) in the bottom-left to (1000, 1000) in the top-right.
+        - The passage in each room connects one ENTRY EDGE to one EXIT EDGE.
         
-        Rules:
-        - Each wall must start at one grid edge and end at another edge
-        - Walls must be roughly parallel, creating a corridor at least 50 units wide
-        - Each segment's end point (x_2, y_2) must be the start point (x_1, y_1) of the next segment in the same wall
-        - Use 10-50 segments per wall (20-100 total)
+        ## EDGE DEFINITIONS
+        - "top" edge: y = 1000, x ranges from 0 to 1000
+        - "bottom" edge: y = 0, x ranges from 0 to 1000
+        - "left" edge: x = 0, y ranges from 0 to 1000
+        - "right" edge: x = 1000, y ranges from 0 to 1000
+        
+        ## CONNECTION RULES
+        1. The EXIT EDGE of room N must be the ENTRY EDGE of room N+1.
+        2. The EXIT POINT of room N must be EXACTLY the same coordinates as the ENTRY POINT of room N+1 (no vertical or horizontal shift; numbers must match exactly).
+        3. Do not alter inherited coordinates — copy them exactly.
+        4. Passages must be continuous from room to room.
+        
+        ## PASSAGE CONSTRUCTION RULES
+        - Each passage has a centerline between ENTRY POINT and EXIT POINT.
+        - Draw two parallel walls on either side of this centerline to form the passage.
+        - Passage width: between 50 and 450 units (varied as desired).
+        - Each wall consists of 5–10 connected straight segments.
+        - The end point (x_2, y_2) of one segment must be the start point (x_1, y_1) of the next segment in the same wall.
+        - Segments must stay within the 0–1000 coordinate range.
+        - Vary passage shapes: they may be straight, curved, zig-zag, or angled, but must remain continuous and connect entry_point to exit_point exactly.
+        - Avoid repeating the same orientation (vertical/horizontal) for two consecutive rooms.
+        - Vary the passage width between rooms (between 50 and 450 units).
+        
+        ## ADDITIONAL OUTPUT RULES
+        - N = 15
+        - All coordinates must be integers.
+        - Each room must follow the rules above.
+        - Do not include any text outside the JSON object.
     """)
-
-    resp = model.prompt(prompt, schema=Room)
-    return Room.model_validate(json.loads(resp.text()))
+    response = client.responses.parse(
+        model=model_name,
+        input=[
+            {"role": "system", "content": "You are a game designer creating levels."},
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        text_format=MapSequence
+    )
+    map_file = f"map-{time.time()}.json"
+    with open(f"maps/{map_file}", "w") as f:
+        f.write(response.output_parsed.model_dump_json())
+    return response.output_parsed
 
 
 if __name__ == "__main__":
-    ask_for_room()
+    ask_for_map()
