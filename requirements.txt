@@ -1,4 +1,7 @@
+dotenv==0.9.9
+infinite-temple==0.1.0
 llm-anthropic==0.16
 llm-ollama==0.10.0
 pip-chill==1.0.3
-pygame
+pygame==2.6.1
+pysynth==0.0.4
