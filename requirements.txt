@@ -2,6 +2,9 @@ dotenv==0.9.9
 infinite-temple==0.1.0
 llm-anthropic==0.16
 llm-ollama==0.10.0
+pandas==2.3.3
 pip-chill==1.0.3
+pycollision==0.0.2
 pygame==2.6.1
-pysynth==0.0.4
+scikit-learn==1.6.1
+tomita==0.2.0
