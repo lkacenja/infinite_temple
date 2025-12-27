@@ -6,14 +6,14 @@ import pygame
 class Rubble(pygame.sprite.Sprite):
     def __init__(self, x, y, room_id, config):
         pygame.sprite.Sprite.__init__(self)
-        self.surface = config.SURFACE
+        self.surface = config.surface
 
         self.x = x
         self.y = y
         self.room_id = room_id
 
         # Random size between player_size and 5 * player_size
-        self.size = random.uniform(config.PLAYER_SIZE * 5, config.PLAYER_SIZE  * 10)
+        self.size = random.uniform(config.player_size * 5, config.player_size  * 10)
         self.radius = self.size * 0.5
 
         # Random drift direction and speed

@@ -1,5 +1,11 @@
-from tomita.legacy import pysynth_c as synthesizer
+import json
+import tempfile
+import os
 
+from tomita.legacy import pysynth_c as synthesizer
+import pygame
+
+from infinite_temple.schema.audio import AmbientMusic
 
 class MusicPlayer:
     """Non-blocking music player that can be stopped and managed."""

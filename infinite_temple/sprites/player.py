@@ -7,8 +7,8 @@ import pygame
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y, config):
         pygame.sprite.Sprite.__init__(self)
-        self.player_size = config.PLAYER_SIZE
-        self.surface = config.SURFACE
+        self.player_size = config.player_size
+        self.surface = config.surface
         self.x = x
         self.y = y
 
