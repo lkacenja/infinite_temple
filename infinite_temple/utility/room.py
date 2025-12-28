@@ -35,6 +35,7 @@ class RoomManager:
             )
             self.connection_map[reverse_key] = reverse_conn
 
+
     def get_current_room(self):
         """Get the current room object."""
         return self.room_sequence.rooms[self.current_room_id]

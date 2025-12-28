@@ -504,52 +504,45 @@ ROOM_PORTAL_MAP = {
 }
 
 
-def infer_connection_direction(from_template: str, to_template: str) -> tuple[str, str]:
+def infer_connection_direction(from_template: str, to_template: str, from_entry: str = None) -> tuple[str, str]:
     """Infer which portals connect based on room template names
 
-    Returns: (from_portal_id, to_portal_id)
+    Args:
+        from_template: The template name of the source room
+        to_template: The template name of the destination room
+        from_entry: Which portal was used to ENTER the from_room (to determine which portal to exit)
 
-    Logic: For consecutive rooms, the "exit" portal of the first room connects
-    to the "entrance" portal of the second room. For most rooms, the exit portal
-    is the one that wasn't used as the entrance (the "second" portal in the list).
+    Returns: (from_portal_id, to_portal_id)
     """
     from_portals = ROOM_PORTAL_MAP.get(from_template, [])
     to_portals = ROOM_PORTAL_MAP.get(to_template, [])
 
-    # For rooms with 2 portals, the exit is typically the second portal
-    # (the first portal is usually the entrance from the previous room)
-    # For start room with 1 portal, use that portal
-    from_exit = from_portals[-1] if from_portals else None
-    to_entrance = to_portals[0] if to_portals else None
+    # Determine exit portal of from_room
+    if from_entry and from_entry in from_portals and len(from_portals) == 2:
+        # For rooms with 2 portals, exit through the OTHER portal
+        from_exit = from_portals[1] if from_portals[0] == from_entry else from_portals[0]
+    else:
+        # Use the last portal as the exit (works for start room and first connection)
+        from_exit = from_portals[-1] if from_portals else None
 
-    if from_exit and to_entrance:
-        # Verify these portals can geometrically connect
-        # Opposite directions should connect: east↔west, north↔south
-        opposite_pairs = {
-            ("east", "west"), ("west", "east"),
-            ("north", "south"), ("south", "north")
-        }
+    if not from_exit:
+        raise ValueError(f"Cannot determine exit portal for {from_template}")
 
-        if (from_exit, to_entrance) in opposite_pairs:
-            return (from_exit, to_entrance)
+    # The entrance portal of to_room must be opposite to the exit of from_room
+    # east ↔ west, north ↔ south
+    opposite_map = {
+        "east": "west",
+        "west": "east",
+        "north": "south",
+        "south": "north"
+    }
 
-    # Fallback: try priority-based matching
-    priority = [
-        ("east", "west"),
-        ("south", "north"),
-        ("west", "east"),
-        ("north", "south")
-    ]
+    to_entrance = opposite_map.get(from_exit)
 
-    for from_p, to_p in priority:
-        if from_p in from_portals and to_p in to_portals:
-            return (from_p, to_p)
+    if to_entrance and to_entrance in to_portals:
+        return (from_exit, to_entrance)
 
-    # Last resort: connect any available portals
-    if from_portals and to_portals:
-        return (from_portals[-1], to_portals[0])
-
-    raise ValueError(f"Cannot infer connection between {from_template} and {to_template}")
+    raise ValueError(f"Cannot connect {from_template}.{from_exit} to {to_template} (no {to_entrance} portal)")
 
 
 def convert_legacy_map(legacy_sequence: RoomSequence, map_size: int = 1000) -> RoomSequenceV2:
@@ -570,11 +563,18 @@ def convert_legacy_map(legacy_sequence: RoomSequence, map_size: int = 1000) -> R
         room_templates.append(template)
 
     # Build connections between consecutive rooms
+    # Track which portal was used to enter each room
+    entry_portals = [None] * len(legacy_sequence.rooms)  # entry_portals[i] = portal used to enter room i
+
     for i in range(len(legacy_sequence.rooms) - 1):
         from_template = legacy_sequence.rooms[i]
         to_template = legacy_sequence.rooms[i + 1]
+        from_entry = entry_portals[i]  # How we entered room i
 
-        from_portal, to_portal = infer_connection_direction(from_template, to_template)
+        from_portal, to_portal = infer_connection_direction(from_template, to_template, from_entry)
+
+        # Record that room i+1 will be entered through to_portal
+        entry_portals[i + 1] = to_portal
 
         connection = RoomConnection(
             from_room=i,

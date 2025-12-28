@@ -28,8 +28,8 @@ config = GameConfig(
     player_size=10
 )
 
-def add_rubble(room_id, room_type):
-    if room_type in ("AntechamberHorizontal", "AntechamberVertical"):
+def add_rubble(room_id, room_name):
+    if room_name in ("antechamber_horizontal", "antechamber_vertical"):
         for n in range(random.randrange(3, 5)):
             rubble = Rubble(500, 500, room_id, config)
             rubble_sprites.add(rubble)
@@ -59,7 +59,7 @@ render_room(room, walls_sprites, config)
 progress_display = RoomProgressDisplay(x=config.display_width - 30, y=19, font_size=19)
 
 for n, room in enumerate(room_sequence.rooms):
-    add_rubble(n, room.__class__.__name__)
+    add_rubble(n, room.name)
 
 health_bar = HealthBar(10, 10, 300, 8)
 current_health = 100.0
