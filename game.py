@@ -147,16 +147,31 @@ while True:
         else:
             death_timer = 0
 
-        # Update player
+        # Update player movement
         P1.updatePlayer()
-        P1.drawPlayer()
 
-        # Check room transitions
-        transition = room_manager.check_transition(P1, 1000)
+        # Check room transitions FIRST (before collision pushes player back)
+        # Portal trigger zones extend beyond room boundaries to catch player before wall collision
+        transition = room_manager.check_transition(P1, debug=False)
         if transition:
             walls_sprites.empty()
             room = room_manager.get_current_room()
             render_room(room, walls_sprites, config)
+        else:
+            # Only check collisions if we didn't transition
+            # Player-wall collision detection and response (BEFORE drawing to prevent tunneling)
+            # Check multiple times per frame if moving fast to prevent tunneling
+            speed = math.sqrt(P1.hspeed ** 2 + P1.vspeed ** 2)
+            collision_iterations = max(1, int(speed / (P1.radius / 2)))
+
+            for _ in range(collision_iterations):
+                colliding = pygame.sprite.spritecollide(P1, walls_sprites, False, wall_collision_test)
+                if len(colliding) > 0:
+                    handle_wall_collision(P1, colliding[0])
+                    break
+
+        # Draw player
+        P1.drawPlayer()
 
         # Update rubble
         for rubble in rubble_sprites:
@@ -179,11 +194,6 @@ while True:
         # Draw walls
         for wall in walls_sprites:
             wall.drawWall()
-
-        # Player-wall collisions
-        colliding = pygame.sprite.spritecollide(P1, walls_sprites, False, wall_collision_test)
-        if len(colliding) > 0:
-            handle_wall_collision(P1, colliding[0])
 
         # Draw UI
         percent_health = (P1.current_health / P1.max_health if P1.current_health > 0 else 0) * 100

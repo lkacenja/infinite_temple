@@ -1,119 +1,96 @@
 import json
 
 from infinite_temple.schema import room as room_schema
-from infinite_temple.schema.room import HydratedRoomSequence
+from infinite_temple.schema.room import HydratedRoomSequence, RoomSequenceV2, RoomConnection
 from infinite_temple.sprites.wall import Wall
 
 class RoomManager:
     """
-    Manages room transitions by tracking which edge the player entered from.
+    Manages room transitions using portal-based connections.
     """
 
-    def __init__(self, room_sequence):
+    def __init__(self, room_sequence: RoomSequenceV2):
         """
         Initialize the room manager.
 
         Args:
-            room_sequence: HydratedRoomSequence with all rooms
+            room_sequence: RoomSequenceV2 with rooms and portal connections
         """
         self.room_sequence = room_sequence
         self.current_room_id = 0
-        self.entry_edge = None  # Track which edge player entered current room from
-        self.direction = 1  # 1 for forward, -1 for backward
+
+        # Build connection lookup: (room_id, portal_id) -> RoomConnection
+        self.connection_map = {}
+        for conn in room_sequence.connections:
+            key = (conn.from_room, conn.from_portal)
+            self.connection_map[key] = conn
+
+            # Add bidirectional connection for backward navigation
+            reverse_key = (conn.to_room, conn.to_portal)
+            reverse_conn = RoomConnection(
+                from_room=conn.to_room,
+                from_portal=conn.to_portal,
+                to_room=conn.from_room,
+                to_portal=conn.from_portal
+            )
+            self.connection_map[reverse_key] = reverse_conn
 
     def get_current_room(self):
         """Get the current room object."""
         return self.room_sequence.rooms[self.current_room_id]
 
-    def start_room(self, entry_edge="CENTER"):
+    def check_transition(self, player, debug=False):
         """
-        Set the initial room and entry edge.
-
-        Args:
-            entry_edge: "LEFT", "RIGHT", "TOP", "BOTTOM", or "CENTER" for starting room
-        """
-        self.current_room_id = 0
-        self.entry_edge = entry_edge
-        self.direction = 1  # Start moving forward
-
-    def check_transition(self, player, map_size=1000):
-        """
-        Check if player has crossed a room boundary and handle transition.
+        Check if player has triggered a portal and handle transition.
 
         Args:
             player: Player instance with x, y coordinates
-            map_size: Size of the map (default 1000)
+            debug: Print debug information
 
         Returns:
             True if a transition occurred, False otherwise
         """
-        corridor_width = int(map_size * 0.2)
-        center = map_size // 2
-        corridor_start = center - corridor_width // 2
-        corridor_end = center + corridor_width // 2
+        current_room = self.get_current_room()
 
-        exit_edge = None
+        # Debug: check if player is outside room bounds
+        if debug and (player.x < -100 or player.x > 1100 or player.y < -100 or player.y > 1100):
+            print(f"Player position: ({player.x:.1f}, {player.y:.1f})")
+            print(f"Current room: {current_room.name} (id={self.current_room_id})")
+            print(f"Available portals: {list(current_room.portals.keys())}")
 
-        # Determine which edge (if any) the player has crossed
-        if player.x > map_size and corridor_start <= player.y <= corridor_end:
-            exit_edge = "RIGHT"
-        elif player.x < 0 and corridor_start <= player.y <= corridor_end:
-            exit_edge = "LEFT"
-        elif player.y > map_size and corridor_start <= player.x <= corridor_end:
-            exit_edge = "BOTTOM"
-        elif player.y < 0 and corridor_start <= player.x <= corridor_end:
-            exit_edge = "TOP"
+        # Check each portal in the current room
+        for portal_id, portal in current_room.portals.items():
+            if debug and (player.x < -100 or player.x > 1100 or player.y < -100 or player.y > 1100):
+                rect = portal.trigger_rect
+                print(f"  Portal '{portal_id}': trigger_rect=({rect.x}, {rect.y}, {rect.width}, {rect.height})")
+                print(f"    Would contain player? {rect.contains(player.x, player.y)}")
 
-        # No edge crossed, still in room
-        if exit_edge is None:
-            return False
+            if portal.trigger_rect.contains(player.x, player.y):
+                # Find the connection for this portal
+                connection_key = (self.current_room_id, portal_id)
+                connection = self.connection_map.get(connection_key)
 
-        # Check if direction changed: exiting through entry edge means reversing direction
-        if exit_edge == self.entry_edge:
-            # Direction change detected - flip the direction flag
-            self.direction *= -1
+                if debug:
+                    print(f"  Portal '{portal_id}' triggered! Connection: {connection}")
 
-        # Use the current direction for room transition
-        new_room_id = self.current_room_id + self.direction
+                if connection:
+                    # Get the destination room and portal
+                    dest_room = self.room_sequence.rooms[connection.to_room]
+                    dest_portal = dest_room.portals[connection.to_portal]
 
-        # The new entry edge is the opposite of the exit edge
-        new_entry_edge = self._get_opposite_edge(exit_edge)
+                    if debug:
+                        print(f"  Transitioning to room {connection.to_room} ({dest_room.name}) via portal '{connection.to_portal}'")
 
-        # Perform transition
-        self.current_room_id = new_room_id
-        self.entry_edge = new_entry_edge
+                    # Transition to new room
+                    self.current_room_id = connection.to_room
 
-        # Reposition player to opposite edge
-        self._reposition_player(player, new_entry_edge, map_size)
-        return True
+                    # Spawn player at destination portal
+                    player.x = dest_portal.spawn_point.x
+                    player.y = dest_portal.spawn_point.y
 
-    def _get_opposite_edge(self, edge):
-        """Get the opposite edge."""
-        opposites = {
-            "LEFT": "RIGHT",
-            "RIGHT": "LEFT",
-            "TOP": "BOTTOM",
-            "BOTTOM": "TOP"
-        }
-        return opposites.get(edge)
+                    return True
 
-    def _reposition_player(self, player, entry_edge, map_size):
-        """
-        Reposition player to the entry edge of the new room.
-
-        Args:
-            player: Player instance
-            entry_edge: Which edge the player is entering from
-            map_size: Size of the map
-        """
-        if entry_edge == "LEFT":
-            player.x = 0
-        elif entry_edge == "RIGHT":
-            player.x = map_size
-        elif entry_edge == "TOP":
-            player.y = 0
-        elif entry_edge == "BOTTOM":
-            player.y = map_size
+        return False
 
 
 def load_map_file(file: str):
@@ -122,16 +99,15 @@ def load_map_file(file: str):
     return room_schema.RoomSequence.model_validate(map_json)
 
 
-def build_room_sequence(room_file: str):
-    active_map = load_map_file(room_file)
-    hydrated_rooms = []
-    for i, room_name in enumerate(active_map.rooms):
-        room_class = getattr(room_schema, room_schema.room_classes[room_name])
-        hydrated_rooms.append(room_class(i, 1000))
-    return HydratedRoomSequence(rooms=hydrated_rooms)
+def build_room_sequence(room_file: str) -> RoomSequenceV2:
+    """Load legacy map file and convert to portal-based RoomSequenceV2"""
+    legacy_map = load_map_file(room_file)
+    return room_schema.convert_legacy_map(legacy_map, map_size=1000)
+
 
 def render_room(room, sprite_group, config, debug: bool = False):
+    """Render a RoomTemplate by creating wall sprites"""
     if debug:
-        print(room_manager.current_room_id, " ", room.__class__.__name__)
+        print(f"Room: {room.name}")
     for segment in room.walls:
         sprite_group.add(Wall(segment, config))
