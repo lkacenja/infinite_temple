@@ -5,20 +5,81 @@ import json
 import random
 import os
 import tempfile
+import argparse
 
 import pygame
 from pygame.locals import *
 
 from infinite_temple.utility.ui import HealthBar, RoomProgressDisplay
 from infinite_temple.utility.room import RoomManager, build_room_sequence, render_room
-#from infinite_temple.utility.music import play_music_file
+from infinite_temple.utility.music import play_music_file
 from infinite_temple.utility.collision import *
 from infinite_temple.sprites.player import Player
 from infinite_temple.sprites.rubble import Rubble
 from infinite_temple.utility.svg import draw_centered_surface, SVGLoader, render_text_fallback
 from infinite_temple.schema.config import GameConfig
+from infinite_temple.persistence.temple_repository import TempleRepository
 
 player_max_rtspd = 10
+
+
+def load_temple_from_args():
+    """
+    Load temple from CLI arguments or use most recent.
+
+    Returns:
+        TempleConfiguration or None if no temples available
+    """
+    parser = argparse.ArgumentParser(
+        description="Play Infinite Temple - Desolate space horror roguelike",
+        epilog="Example: python game.py --temple temple_1234567890"
+    )
+
+    parser.add_argument(
+        "--temple",
+        type=str,
+        help="Temple ID to load (default: most recent temple)"
+    )
+
+    parser.add_argument(
+        "--temple-dir",
+        type=str,
+        default="maps/temples",
+        help="Base directory for temple assets (default: maps/temples)"
+    )
+
+    args = parser.parse_args()
+
+    # Load temple repository
+    repo = TempleRepository(base_dir=args.temple_dir)
+
+    # Get temple
+    if args.temple:
+        # Load specific temple by ID
+        temple = repo.load_temple(args.temple)
+        if not temple:
+            print(f"Error: Temple '{args.temple}' not found.", file=sys.stderr)
+            print(f"\nAvailable temples:", file=sys.stderr)
+            temples = repo.list_temples()
+            if temples:
+                for t in temples:
+                    print(f"  - {t.temple_id}: {t.narrative.title}", file=sys.stderr)
+            else:
+                print("  (none)", file=sys.stderr)
+            sys.exit(1)
+        return temple
+    else:
+        # Use most recent temple
+        temples = repo.list_temples(sort_by="created_at")
+        if not temples:
+            print("Error: No temples found.", file=sys.stderr)
+            print("\nGenerate a temple first:", file=sys.stderr)
+            print("  python create_temple.py <word1> <word2> <word3>", file=sys.stderr)
+            print("\nExample:", file=sys.stderr)
+            print("  python create_temple.py crystal shadow signal", file=sys.stderr)
+            sys.exit(1)
+        return temples[0]
+
 
 pygame.init()
 
@@ -27,6 +88,13 @@ config = GameConfig(
     display_height=1000,
     player_size=10
 )
+
+# Load temple
+temple = load_temple_from_args()
+print(f"Loading temple: {temple.narrative.title}")
+print(f"Seed words: {', '.join(temple.seed_words)}")
+print(f"Rooms: {temple.room_count}")
+print()
 
 def add_rubble(room_id, room_name):
     if room_name in ("antechamber_horizontal", "antechamber_vertical"):
@@ -46,12 +114,13 @@ rubble_sprites = pygame.sprite.Group()
 
 FramePerSec = pygame.time.Clock()
 
-pygame.display.set_caption("INFINITE TEMPLE")
+pygame.display.set_caption(f"INFINITE TEMPLE - {temple.narrative.title}")
 
-room_sequence = build_room_sequence("maps/map-1765062702.200778.json")
+# Load temple assets
+room_sequence = build_room_sequence(temple.map_file)
 room_manager = RoomManager(room_sequence)
 
-#play_music_file("maps/audio-1765141789.983802.json")
+play_music_file(temple.audio_file)
 
 room = room_manager.get_current_room()
 render_room(room, walls_sprites, config)
@@ -68,8 +137,8 @@ clock = pygame.time.Clock()
 
 # Game state
 game_state = "start_screen"
-start_screen_surface = SVGLoader().load_svg("maps/infinite_temple_poster.svg", width=500, height=500)
-game_over_surface = SVGLoader().load_svg("maps/game_over_poster.svg", width=500, height=500)
+start_screen_surface = SVGLoader().load_svg(temple.title_svg_file, width=500, height=500)
+game_over_surface = SVGLoader().load_svg(temple.gameover_svg_file, width=500, height=500)
 
 death_timer = 0  # Timer for game over delay
 DEATH_DELAY = 5.0  # 5 seconds delay before game over screen
