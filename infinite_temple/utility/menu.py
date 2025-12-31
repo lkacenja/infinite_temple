@@ -1,4 +1,5 @@
 import pygame
+import random
 
 
 ATMOSPHERIC_WORDS = [
@@ -138,7 +139,7 @@ class WordPicker:
         self.on_back_clicked = on_back_clicked
 
         self.words = ATMOSPHERIC_WORDS
-        self.selected_words = [0, 0, 0]  # Indices into ATMOSPHERIC_WORDS
+        self.selected_words = random.sample(range(len(self.words)), 3)  # Random default words
         self.current_slot = 0  # Which word slot (0, 1, or 2)
 
         self.font = pygame.font.Font(None, 24)
@@ -273,7 +274,7 @@ class GenerationProgressOverlay:
     """
     Renders temple generation progress over dark background.
 
-    Replaces menu during generation, shows progress bar and status messages.
+    Replaces menu during generation, shows progress bar and parallel task statuses.
     """
 
     def __init__(self, surface):
@@ -286,39 +287,90 @@ class GenerationProgressOverlay:
         self.surface = surface
         self.progress = 0
         self.message = ""
+        self.task_statuses = None
 
-    def update_progress(self, percent, message):
+    def update_progress(self, percent, message, task_statuses=None):
         """
         Callback for TempleGenerationPipeline.
 
         Args:
             percent: Progress percentage (0-100)
             message: Status message
+            task_statuses: Optional dict of parallel task statuses
         """
         self.progress = percent
         self.message = message
+        if task_statuses is not None:
+            self.task_statuses = task_statuses
 
     def draw(self):
-        """Render progress bar and message."""
+        """Render progress bar, main message, and parallel task statuses."""
         # Draw dark background
         self.surface.fill((0, 0, 0))
 
-        # Draw progress bar (centered)
+        # Calculate center position
+        center_x = self.surface.get_width() // 2
+        center_y = self.surface.get_height() // 2
+
+        # Draw main progress bar (centered)
         bar_width = 600
         bar_height = 40
-        x = (self.surface.get_width() - bar_width) // 2
-        y = (self.surface.get_height() - bar_height) // 2
+        bar_x = center_x - bar_width // 2
+        bar_y = center_y - 100
 
         # Background bar
-        pygame.draw.rect(self.surface, (50, 50, 50), (x, y, bar_width, bar_height))
+        pygame.draw.rect(self.surface, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
 
         # Fill bar
         fill_width = int(bar_width * self.progress / 100)
-        pygame.draw.rect(self.surface, (100, 100, 100), (x, y, fill_width, bar_height))
+        pygame.draw.rect(self.surface, (100, 100, 100), (bar_x, bar_y, fill_width, bar_height))
 
-        # Draw message below bar
+        # Draw percentage text on bar
         font = pygame.font.Font(None, 24)
-        text = font.render(self.message, True, (180, 180, 180))
-        text_x = (self.surface.get_width() - text.get_width()) // 2
-        text_y = y + bar_height + 20
-        self.surface.blit(text, (text_x, text_y))
+        percent_text = font.render(f"{int(self.progress)}%", True, (200, 200, 200))
+        percent_x = center_x - percent_text.get_width() // 2
+        percent_y = bar_y + (bar_height - percent_text.get_height()) // 2
+        self.surface.blit(percent_text, (percent_x, percent_y))
+
+        # Draw main message above bar
+        if self.message:
+            message_text = font.render(self.message, True, (180, 180, 180))
+            message_x = center_x - message_text.get_width() // 2
+            message_y = bar_y - 40
+            self.surface.blit(message_text, (message_x, message_y))
+
+        # Draw parallel task statuses below bar
+        if self.task_statuses:
+            task_y = bar_y + bar_height + 40
+            task_spacing = 30
+
+            task_font = pygame.font.Font(None, 20)
+
+            # Task display names
+            task_names = {
+                "map": "Room Layout",
+                "music": "Ambient Music",
+                "title_svg": "Title Screen",
+                "gameover_svg": "Game Over Screen"
+            }
+
+            for task_id, task_info in self.task_statuses.items():
+                display_name = task_names.get(task_id, task_id)
+                status_msg = task_info["message"]
+
+                # Choose color based on status
+                if task_info["complete"]:
+                    color = (100, 200, 100)  # Green
+                elif task_info["error"]:
+                    color = (200, 100, 100)  # Red
+                elif "Generating" in status_msg or "Composing" in status_msg:
+                    color = (200, 200, 100)  # Yellow (in progress)
+                else:
+                    color = (120, 120, 120)  # Gray (waiting)
+
+                # Render task status
+                task_text = task_font.render(f"{display_name}: {status_msg}", True, color)
+                task_x = center_x - task_text.get_width() // 2
+                self.surface.blit(task_text, (task_x, task_y))
+
+                task_y += task_spacing

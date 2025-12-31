@@ -1,7 +1,8 @@
 import json
 
 from infinite_temple.schema import room as room_schema
-from infinite_temple.schema.room import HydratedRoomSequence, RoomSequenceV2, RoomConnection
+from infinite_temple.schema.room import RoomSequenceFullGeometry, RoomConnection
+from infinite_temple.schema.config import GameConfig
 from infinite_temple.sprites.wall import Wall
 
 class RoomManager:
@@ -9,12 +10,12 @@ class RoomManager:
     Manages room transitions using portal-based connections.
     """
 
-    def __init__(self, room_sequence: RoomSequenceV2):
+    def __init__(self, room_sequence: RoomSequenceFullGeometry):
         """
         Initialize the room manager.
 
         Args:
-            room_sequence: RoomSequenceV2 with rooms and portal connections
+            room_sequence: RoomSequenceFullGeometry with rooms and portal connections
         """
         self.room_sequence = room_sequence
         self.current_room_id = 0
@@ -100,10 +101,11 @@ def load_map_file(file: str):
     return room_schema.RoomSequence.model_validate(map_json)
 
 
-def build_room_sequence(room_file: str) -> RoomSequenceV2:
-    """Load legacy map file and convert to portal-based RoomSequenceV2"""
-    legacy_map = load_map_file(room_file)
-    return room_schema.convert_legacy_map(legacy_map, map_size=1000)
+def build_room_sequence(room_file: str, config: GameConfig) -> RoomSequenceFullGeometry:
+    """Load map file and build full room geometry with portals and connections"""
+    room_sequence = load_map_file(room_file)
+    map_size = config.display_width
+    return room_schema.build_full_geometry(room_sequence, map_size=map_size)
 
 
 def render_room(room, sprite_group, config, debug: bool = False):

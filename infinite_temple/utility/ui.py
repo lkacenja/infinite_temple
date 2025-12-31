@@ -1,5 +1,7 @@
 import pygame
 
+from infinite_temple.utility.difficulty import calculate_difficulty
+
 class HealthBar:
     def __init__(self, x, y, width, height, border_width=3):
         """
@@ -127,8 +129,11 @@ class RoomProgressDisplay:
             self._draw_normal(surface)
 
     def _draw_normal(self, surface):
-        """Draw the normal (non-animated) display."""
-        text = f"{self.highest_room_id}"
+        """Draw the normal (non-animated) display with difficulty triangles."""
+        difficulty = calculate_difficulty(self.highest_room_id)
+        triangles = "^" * difficulty
+        separator = " " if difficulty > 0 else ""
+        text = f"{self.highest_room_id}{separator}{triangles}"
         text_surface = self.font.render(text, True, self.normal_color)
         text_rect = text_surface.get_rect(center=(self.x, self.y))
         surface.blit(text_surface, text_rect)
@@ -141,10 +146,14 @@ class RoomProgressDisplay:
         else:
             scale = 1.5 - ((progress - 0.5) * 2) * 0.5  # Shrink back to 1.0x
 
+        difficulty = calculate_difficulty(self.last_milestone)
+        triangles = "^" * difficulty
+        separator = " " if difficulty > 0 else ""
+
         text_color = (255, 255, 255)
         scaled_font_size = int(self.font_size * scale)
         scaled_font = pygame.font.Font(None, scaled_font_size)
-        text = f"{self.last_milestone}"
+        text = f"{self.last_milestone}{separator}{triangles}"
         text_surface = scaled_font.render(text, True, text_color)
         text_rect = text_surface.get_rect(center=(self.x, self.y))
         surface.blit(text_surface, text_rect)

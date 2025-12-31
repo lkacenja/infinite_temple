@@ -3,8 +3,8 @@ from typing import List, Dict, Any, Optional
 
 
 class Point(BaseModel):
-    x: int = Field(..., ge=0, le=1000)
-    y: int = Field(..., ge=0, le=1000)
+    x: int = Field(..., ge=0, le=10000)
+    y: int = Field(..., ge=0, le=10000)
 
 
 class Rectangle(BaseModel):
@@ -49,8 +49,8 @@ class RoomConnection(BaseModel):
     to_portal: str = Field(..., description="Destination portal ID")
 
 
-class RoomSequenceV2(BaseModel):
-    """Portal-based room sequence with explicit connections"""
+class RoomSequenceFullGeometry(BaseModel):
+    """Portal-based room sequence with explicit connections and full geometry"""
     rooms: List[RoomTemplate] = Field(min_length=1, description="List of room templates")
     connections: List[RoomConnection] = Field(min_length=0, description="Explicit portal connections between rooms")
 
@@ -58,10 +58,6 @@ class RoomSequenceV2(BaseModel):
 class Room(BaseModel):
     id: int = Field(description="Unique identifier for the room in the series")
     walls: List[Segment] = Field(min_length=1, max_length=100, description="Walls making up the passage")
-
-
-class HydratedRoomSequence(BaseModel):
-    rooms: List[Room] = Field(min_length=2, description="List of rooms forming a connected sequence")
 
 
 class RoomSequence(BaseModel):
@@ -545,8 +541,8 @@ def infer_connection_direction(from_template: str, to_template: str, from_entry:
     raise ValueError(f"Cannot connect {from_template}.{from_exit} to {to_template} (no {to_entrance} portal)")
 
 
-def convert_legacy_map(legacy_sequence: RoomSequence, map_size: int = 1000) -> RoomSequenceV2:
-    """Convert old RoomSequence format to new portal-based RoomSequenceV2"""
+def build_full_geometry(room_sequence: RoomSequence, map_size: int = 1000) -> RoomSequenceFullGeometry:
+    """Convert RoomSequence name list to full geometry with portals and connections"""
     import sys
     current_module = sys.modules[__name__]
 
@@ -554,7 +550,7 @@ def convert_legacy_map(legacy_sequence: RoomSequence, map_size: int = 1000) -> R
     connections = []
 
     # Build room templates
-    for i, room_name in enumerate(legacy_sequence.rooms):
+    for i, room_name in enumerate(room_sequence.rooms):
         room_class_name = room_classes[room_name]
         room_class = getattr(current_module, room_class_name)
         room_instance = room_class(i, map_size)
@@ -564,11 +560,11 @@ def convert_legacy_map(legacy_sequence: RoomSequence, map_size: int = 1000) -> R
 
     # Build connections between consecutive rooms
     # Track which portal was used to enter each room
-    entry_portals = [None] * len(legacy_sequence.rooms)  # entry_portals[i] = portal used to enter room i
+    entry_portals = [None] * len(room_sequence.rooms)  # entry_portals[i] = portal used to enter room i
 
-    for i in range(len(legacy_sequence.rooms) - 1):
-        from_template = legacy_sequence.rooms[i]
-        to_template = legacy_sequence.rooms[i + 1]
+    for i in range(len(room_sequence.rooms) - 1):
+        from_template = room_sequence.rooms[i]
+        to_template = room_sequence.rooms[i + 1]
         from_entry = entry_portals[i]  # How we entered room i
 
         from_portal, to_portal = infer_connection_direction(from_template, to_template, from_entry)
@@ -584,4 +580,4 @@ def convert_legacy_map(legacy_sequence: RoomSequence, map_size: int = 1000) -> R
         )
         connections.append(connection)
 
-    return RoomSequenceV2(rooms=room_templates, connections=connections)
+    return RoomSequenceFullGeometry(rooms=room_templates, connections=connections)

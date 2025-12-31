@@ -1,18 +1,20 @@
 """
 Temple generation pipeline.
 
-Orchestrates sequential generation of all temple assets:
-1. Narrative from seed words
-2. Room layout from narrative
-3. Ambient music from narrative
-4. Title screen SVG from narrative
-5. Game over SVG from narrative
+Orchestrates generation of all temple assets:
+1. Narrative from seed words (blocking - required for all other steps)
+2. Parallel generation of:
+   - Room layout from narrative
+   - Ambient music from narrative
+   - Title screen SVG from narrative
+   - Game over SVG from narrative
 """
 
 import os
 import json
 import time
 import textwrap
+import threading
 from pathlib import Path
 from typing import Optional, Callable
 from datetime import datetime
@@ -330,12 +332,13 @@ class TempleGenerationPipeline:
         Generate complete temple from seed words.
 
         This is the main entry point for temple generation. It orchestrates
-        all generation steps and saves all assets.
+        all generation steps and saves all assets. After narrative generation,
+        all other steps run in parallel for faster generation.
 
         Args:
             seed_words: Three seed words to inspire the temple
             room_count: Number of rooms to generate (default: 100)
-            progress_callback: Optional callback for progress updates (percent, message)
+            progress_callback: Optional callback for progress updates (percent, message, task_statuses)
 
         Returns:
             TempleConfiguration with all asset paths
@@ -357,49 +360,158 @@ class TempleGenerationPipeline:
         temple_dir = self.base_dir / temple_id
         temple_dir.mkdir(parents=True, exist_ok=True)
 
+        # Shared state for parallel tasks
+        task_statuses = {
+            "map": {"complete": False, "message": "Waiting...", "result": None, "error": None},
+            "music": {"complete": False, "message": "Waiting...", "result": None, "error": None},
+            "title_svg": {"complete": False, "message": "Waiting...", "result": None, "error": None},
+            "gameover_svg": {"complete": False, "message": "Waiting...", "result": None, "error": None}
+        }
+        task_lock = threading.Lock()
+
+        def update_overall_progress():
+            """Calculate overall progress and send update."""
+            with task_lock:
+                completed = sum(1 for task in task_statuses.values() if task["complete"])
+                # Narrative is 20%, each of 4 parallel tasks is 20% (total 80%), final save is 5%
+                overall = 20 + (completed * 20)
+
+                # Build status message
+                status_parts = []
+                for task_name, status in task_statuses.items():
+                    status_parts.append(f"{task_name}: {status['message']}")
+                message = " | ".join(status_parts)
+
+                if progress_callback:
+                    progress_callback(overall, message, task_statuses.copy())
+
         self._progress(0, "Starting temple generation...", progress_callback)
 
-        # Stage 1: Generate narrative (20%)
+        # Stage 1: Generate narrative (blocking) - 20%
         self._progress(10, "Generating temple narrative...", progress_callback)
         narrative = generate_narrative(seed_words, client=self.client, model=self.model)
         narrative_file = temple_dir / "narrative.json"
         with open(narrative_file, "w") as f:
             f.write(narrative.model_dump_json(indent=2))
-        self._progress(20, f"✓ Narrative complete: {narrative.title}", progress_callback)
+        self._progress(20, f"✓ Narrative: {narrative.title}", progress_callback)
 
-        # Stage 2: Generate map (40%)
-        self._progress(30, "Generating room layout...", progress_callback)
-        room_sequence = self.generate_map_from_narrative(narrative, room_count)
-        map_file = temple_dir / "map.json"
-        with open(map_file, "w") as f:
-            f.write(room_sequence.model_dump_json(indent=2))
-        self._progress(40, f"✓ Map complete: {len(room_sequence.rooms)} rooms", progress_callback)
+        # Stage 2: Run parallel tasks (map, music, SVGs) - 80%
+        def generate_map_task():
+            try:
+                with task_lock:
+                    task_statuses["map"]["message"] = "Generating..."
+                update_overall_progress()
 
-        # Stage 3: Generate music (60%)
-        self._progress(50, "Composing ambient music...", progress_callback)
-        music = self.generate_music_from_narrative(narrative)
-        audio_file = temple_dir / "audio.json"
-        with open(audio_file, "w") as f:
-            f.write(music.model_dump_json(indent=2))
-        self._progress(60, f"✓ Music complete: {music.title}", progress_callback)
+                room_sequence = self.generate_map_from_narrative(narrative, room_count)
+                map_file = temple_dir / "map.json"
+                with open(map_file, "w") as f:
+                    f.write(room_sequence.model_dump_json(indent=2))
 
-        # Stage 4: Title SVG (80%)
-        self._progress(70, "Generating title screen artwork...", progress_callback)
-        title_svg_file = temple_dir / "title.svg"
-        title_svg = generate_title_svg(narrative, client=self.client, model=self.model)
-        with open(title_svg_file, "w") as f:
-            f.write(title_svg)
-        self._progress(80, "✓ Title screen created", progress_callback)
+                with task_lock:
+                    task_statuses["map"]["complete"] = True
+                    task_statuses["map"]["message"] = f"✓ {len(room_sequence.rooms)} rooms"
+                    task_statuses["map"]["result"] = (room_sequence, map_file)
+                update_overall_progress()
+            except Exception as e:
+                with task_lock:
+                    task_statuses["map"]["error"] = e
+                    task_statuses["map"]["message"] = f"✗ Error"
+                update_overall_progress()
 
-        # Stage 5: Game Over SVG (90%)
-        self._progress(85, "Generating game over screen artwork...", progress_callback)
-        gameover_svg_file = temple_dir / "gameover.svg"
-        gameover_svg = generate_gameover_svg(narrative, client=self.client, model=self.model)
-        with open(gameover_svg_file, "w") as f:
-            f.write(gameover_svg)
-        self._progress(90, "✓ Game over screen created", progress_callback)
+        def generate_music_task():
+            try:
+                with task_lock:
+                    task_statuses["music"]["message"] = "Composing..."
+                update_overall_progress()
 
-        # Stage 6: Save configuration (100%)
+                music = self.generate_music_from_narrative(narrative)
+                audio_file = temple_dir / "audio.json"
+                with open(audio_file, "w") as f:
+                    f.write(music.model_dump_json(indent=2))
+
+                with task_lock:
+                    task_statuses["music"]["complete"] = True
+                    task_statuses["music"]["message"] = f"✓ {music.title[:20]}..."
+                    task_statuses["music"]["result"] = (music, audio_file)
+                update_overall_progress()
+            except Exception as e:
+                with task_lock:
+                    task_statuses["music"]["error"] = e
+                    task_statuses["music"]["message"] = f"✗ Error"
+                update_overall_progress()
+
+        def generate_title_svg_task():
+            try:
+                with task_lock:
+                    task_statuses["title_svg"]["message"] = "Generating..."
+                update_overall_progress()
+
+                title_svg_file = temple_dir / "title.svg"
+                title_svg = generate_title_svg(narrative, client=self.client, model=self.model)
+                with open(title_svg_file, "w") as f:
+                    f.write(title_svg)
+
+                with task_lock:
+                    task_statuses["title_svg"]["complete"] = True
+                    task_statuses["title_svg"]["message"] = "✓ Complete"
+                    task_statuses["title_svg"]["result"] = title_svg_file
+                update_overall_progress()
+            except Exception as e:
+                with task_lock:
+                    task_statuses["title_svg"]["error"] = e
+                    task_statuses["title_svg"]["message"] = "✗ Error"
+                update_overall_progress()
+
+        def generate_gameover_svg_task():
+            try:
+                with task_lock:
+                    task_statuses["gameover_svg"]["message"] = "Generating..."
+                update_overall_progress()
+
+                gameover_svg_file = temple_dir / "gameover.svg"
+                gameover_svg = generate_gameover_svg(narrative, client=self.client, model=self.model)
+                with open(gameover_svg_file, "w") as f:
+                    f.write(gameover_svg)
+
+                with task_lock:
+                    task_statuses["gameover_svg"]["complete"] = True
+                    task_statuses["gameover_svg"]["message"] = "✓ Complete"
+                    task_statuses["gameover_svg"]["result"] = gameover_svg_file
+                update_overall_progress()
+            except Exception as e:
+                with task_lock:
+                    task_statuses["gameover_svg"]["error"] = e
+                    task_statuses["gameover_svg"]["message"] = "✗ Error"
+                update_overall_progress()
+
+        # Launch all parallel tasks
+        threads = [
+            threading.Thread(target=generate_map_task, name="map"),
+            threading.Thread(target=generate_music_task, name="music"),
+            threading.Thread(target=generate_title_svg_task, name="title_svg"),
+            threading.Thread(target=generate_gameover_svg_task, name="gameover_svg")
+        ]
+
+        for thread in threads:
+            thread.start()
+
+        # Wait for all tasks to complete
+        for thread in threads:
+            thread.join()
+
+        # Check for errors
+        errors = [task for task in task_statuses.values() if task["error"] is not None]
+        if errors:
+            error_msgs = [f"{name}: {status['error']}" for name, status in task_statuses.items() if status["error"]]
+            raise RuntimeError(f"Temple generation failed: {'; '.join(error_msgs)}")
+
+        # Extract results
+        room_sequence, map_file = task_statuses["map"]["result"]
+        music, audio_file = task_statuses["music"]["result"]
+        title_svg_file = task_statuses["title_svg"]["result"]
+        gameover_svg_file = task_statuses["gameover_svg"]["result"]
+
+        # Stage 3: Save configuration (100%)
         self._progress(95, "Saving temple configuration...", progress_callback)
         temple_config = TempleConfiguration(
             temple_id=temple_id,
@@ -421,7 +533,7 @@ class TempleGenerationPipeline:
         repo = TempleRepository(base_dir=str(self.base_dir))
         repo.save_temple(temple_config)
 
-        self._progress(100, f"✓ Temple created successfully: {temple_id}", progress_callback)
+        self._progress(100, f"✓ Temple created: {temple_id}", progress_callback)
 
         return temple_config
 
