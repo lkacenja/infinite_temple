@@ -29,7 +29,7 @@ from infinite_temple.persistence.temple_repository import TempleRepository
 
 
 # Default model
-DEFAULT_MODEL = "gpt-5-nano"
+DEFAULT_MODEL = "gpt-5"
 
 # Load environment variables
 load_dotenv()
@@ -60,7 +60,7 @@ class TempleGenerationPipeline:
 
         Args:
             client: Optional OpenAI client (creates one if not provided)
-            model: Model to use for generation (default: gpt-5-nano)
+            model: Model to use for generation (default: gpt-5)
             base_dir: Base directory for temple assets (default: maps/temples)
         """
         if client is None:

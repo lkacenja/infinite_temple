@@ -16,7 +16,7 @@ from infinite_temple.schema.temple import TempleNarrative
 
 
 # Default model for narrative generation
-DEFAULT_MODEL = "gpt-5-nano"
+DEFAULT_MODEL = "gpt-5"
 
 # Load environment variables
 load_dotenv()
@@ -132,7 +132,7 @@ def generate_narrative(
     Args:
         seed_words: Three seed words to inspire the narrative (must be exactly 3)
         client: Optional OpenAI client instance (creates one if not provided)
-        model: Model to use for generation (default: gpt-5-nano)
+        model: Model to use for generation (default: gpt-5)
 
     Returns:
         TempleNarrative with title, backstory, atmosphere, visual_theme

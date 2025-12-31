@@ -18,7 +18,7 @@ from infinite_temple.schema.temple import TempleNarrative
 
 
 # Default model for SVG generation
-DEFAULT_MODEL = "gpt-5-nano"
+DEFAULT_MODEL = "gpt-5"
 
 # Load environment variables
 load_dotenv()
@@ -246,7 +246,7 @@ def generate_title_svg(
     Args:
         narrative: Temple narrative with visual theme and title
         client: Optional OpenAI client instance
-        model: Model to use for generation (default: gpt-5-nano)
+        model: Model to use for generation (default: gpt-5)
 
     Returns:
         SVG markup as string
@@ -322,7 +322,7 @@ def generate_gameover_svg(
     Args:
         narrative: Temple narrative with visual theme
         client: Optional OpenAI client instance
-        model: Model to use for generation (default: gpt-5-nano)
+        model: Model to use for generation (default: gpt-5)
 
     Returns:
         SVG markup as string

@@ -58,3 +58,4 @@ venv.bak/
 .DS_Store
 *.sublime-project
 *.sublime-workspace
+maps
