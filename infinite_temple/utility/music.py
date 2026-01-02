@@ -79,7 +79,10 @@ class MusicPlayer:
         if not pygame.mixer.get_init():
             pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
 
-        pygame.mixer.set_num_channels(len(self.wav_files))
+        # Ensure we have enough channels for music voices + sound effects
+        # Set to at least 16 total, or music voices + 12, whichever is larger
+        required_channels = max(16, len(self.wav_files) + 12)
+        pygame.mixer.set_num_channels(required_channels)
 
         # Load and play all voices simultaneously
         for i, wav_file in enumerate(self.wav_files):

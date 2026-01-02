@@ -275,6 +275,7 @@ def generate_title_svg(
     # Call OpenAI with structured output
     response = client.responses.parse(
         model=model,
+        reasoning={"effort": "medium"},
         input=[
             {
                 "role": "system",
@@ -351,6 +352,7 @@ def generate_gameover_svg(
     # Call OpenAI with structured output
     response = client.responses.parse(
         model=model,
+        reasoning={"effort": "medium"},
         input=[
             {
                 "role": "system",

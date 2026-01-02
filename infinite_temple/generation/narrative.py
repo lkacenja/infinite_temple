@@ -164,6 +164,7 @@ def generate_narrative(
     # Call OpenAI with structured output
     response = client.responses.parse(
         model=model,
+        reasoning={"effort": "medium"},
         input=[
             {
                 "role": "system",

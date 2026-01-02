@@ -43,6 +43,9 @@ class Rubble(pygame.sprite.Sprite):
         self.rect = pygame.Rect(self.x - self.size, self.y - self.size,
                                 self.size * 2, self.size * 2)
 
+        # Track if entrance sound has been played
+        self.entrance_sound_played = False
+
     def updateRubble(self):
         # Drift movement
         self.x += self.hspeed

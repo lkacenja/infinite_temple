@@ -4,14 +4,23 @@ import pygame
 
 
 class Vision(pygame.sprite.Sprite):
-    def __init__(self, x, y, config):
+    def __init__(self, x, y, room_id, config):
         pygame.sprite.Sprite.__init__(self)
-        self.vision_size = config.player_size * 5
+        # Random size: 3x to 7x player size
+        size_multiplier = random.uniform(3.0, 7.0)
+        self.vision_size = config.player_size * size_multiplier
         self.surface = config.surface
         self.x = x
         self.y = y
+        self.room_id = room_id
 
         self.rect = self.surface.get_rect()
+
+        # Movement properties
+        self.hspeed = 0
+        self.vspeed = 0
+        self.move_speed = 0.5  # Slow movement toward player
+        self.radius = self.vision_size
 
         # Pulsating properties
         self.base_radius = self.vision_size
@@ -24,11 +33,14 @@ class Vision(pygame.sprite.Sprite):
         self.lifetime = random.uniform(3.0, 5.0)  # Random 3-5 seconds
         self.age = 0
         self.exploded = False
+        self.has_started_moving = False
+        self.just_exploded = False
         self.arc_fragments = []
 
     def explode(self):
         """Explode the vision into fewer, larger arc segments"""
         self.exploded = True
+        self.just_exploded = True
 
         # Create 4-6 larger arc fragments
         num_fragments = random.randint(4, 6)
@@ -60,22 +72,45 @@ class Vision(pygame.sprite.Sprite):
             }
             self.arc_fragments.append(fragment)
 
-    def updateVision(self, dt=1):
+    def updateVision(self, dt=1, player_x=None, player_y=None):
         """Update the vision state
 
         Args:
             dt: Delta time (usually 1 for frame-based, or actual delta time)
+            player_x: Player's x position (optional)
+            player_y: Player's y position (optional)
         """
         if not self.exploded:
-            # Update age
-            self.age += dt * 0.016  # Assuming ~60 FPS, 0.016 seconds per frame
+            # Move toward player if position provided and player is close enough
+            if player_x is not None and player_y is not None:
+                dx = player_x - self.x
+                dy = player_y - self.y
+                distance = math.sqrt(dx * dx + dy * dy)
+
+                # Only move if player is within 50 pixels
+                if distance > 0 and distance <= 50:
+                    # Mark that we've started moving
+                    if not self.has_started_moving:
+                        self.has_started_moving = True
+
+                    # Normalize and apply move speed
+                    self.hspeed = (dx / distance) * self.move_speed
+                    self.vspeed = (dy / distance) * self.move_speed
+
+                    # Update position
+                    self.x += self.hspeed
+                    self.y += self.vspeed
+
+            # Only update age after we've started moving
+            if self.has_started_moving:
+                self.age += dt
 
             # Pulsate the circle
             self.pulse_time += self.pulse_speed
             self.current_radius = self.base_radius + math.sin(self.pulse_time) * self.pulse_amplitude
 
-            # Check if it's time to explode
-            if self.age >= self.lifetime:
+            # Check if it's time to explode (only if we've started moving)
+            if self.has_started_moving and self.age >= self.lifetime:
                 self.explode()
         else:
             # Update arc fragments

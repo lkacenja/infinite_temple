@@ -183,6 +183,7 @@ class TempleGenerationPipeline:
 
         response = self.client.responses.parse(
             model=self.model,
+            reasoning={"effort": "low"},
             input=[
                 {"role": "system", "content": "You are a level designer creating oppressive, alien temple layouts for a desolate space horror game."},
                 {"role": "user", "content": prompt},
@@ -314,6 +315,7 @@ class TempleGenerationPipeline:
 
         response = self.client.responses.parse(
             model=self.model,
+            reasoning={"effort": "medium"},
             input=[
                 {"role": "user", "content": prompt},
             ],
