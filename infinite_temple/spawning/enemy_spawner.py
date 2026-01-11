@@ -144,17 +144,17 @@ class EnemySpawner:
         Returns:
             String: "rubble", "priest", or "vision"
         """
-        if difficulty < 3:
+        if difficulty < 2:
             return "rubble"
 
-        elif difficulty < 6:
+        elif difficulty < 3:
             # 70% rubble, 30% priest
             return random.choices(
                 ["rubble", "priest"],
                 weights=[70, 30]
             )[0]
 
-        elif difficulty < 9:
+        elif difficulty < 4:
             # 40% rubble, 40% priest, 20% vision
             return random.choices(
                 ["rubble", "priest", "vision"],
