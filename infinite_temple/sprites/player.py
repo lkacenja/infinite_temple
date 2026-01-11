@@ -26,6 +26,8 @@ class Player(pygame.sprite.Sprite):
 
         self.max_health = 100
         self.current_health = self.max_health
+        self.shield = 0
+        self.ammo = 0
 
         self.player_max_speed = 20
         self.fd_fric = 0.75
