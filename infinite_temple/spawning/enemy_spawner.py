@@ -19,12 +19,13 @@ class EnemySpawner:
         self.config = config
         self.spawned_rooms = set()
 
-    def spawn_for_room(self, room_id, room, priest_sprites, vision_sprites, rubble_sprites):
+    def spawn_for_room(self, room_id, main_path_pos, room, priest_sprites, vision_sprites, rubble_sprites):
         """
         Spawn enemies for a room if it hasn't spawned yet.
 
         Args:
-            room_id: Current room ID
+            room_id: Current room ID (for tracking spawned rooms)
+            main_path_pos: Position on main path (for difficulty calculation)
             room: RoomTemplate instance
             priest_sprites: Sprite group for priests
             vision_sprites: Sprite group for visions
@@ -36,7 +37,7 @@ class EnemySpawner:
 
         self.spawned_rooms.add(room_id)
 
-        difficulty = calculate_difficulty(room_id)
+        difficulty = calculate_difficulty(main_path_pos)
 
         # Determine if this room should spawn
         should_spawn, count_range = self._should_spawn_enemies(room_id, room.name, difficulty)

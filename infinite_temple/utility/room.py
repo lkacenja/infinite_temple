@@ -10,15 +10,25 @@ class RoomManager:
     Manages room transitions using portal-based connections.
     """
 
-    def __init__(self, room_sequence: RoomSequenceFullGeometry):
+    def __init__(self, room_sequence: RoomSequenceFullGeometry, main_path_length: int = None):
         """
         Initialize the room manager.
 
         Args:
             room_sequence: RoomSequenceFullGeometry with rooms and portal connections
+            main_path_length: Number of rooms on the main path (for difficulty/progress tracking)
         """
         self.room_sequence = room_sequence
         self.current_room_id = 0
+
+        # Main path tracking for difficulty and progress
+        # If not specified, assume all rooms are main path
+        self.main_path_length = main_path_length or len(room_sequence.rooms)
+        self.main_path_position = 0
+
+        # Track unique rooms visited for score (starting room counts as visited)
+        self.visited_rooms = {0}
+        self.unique_rooms_visited = 1
 
         # Build connection lookup: (room_id, portal_id) -> RoomConnection
         self.connection_map = {}
@@ -86,6 +96,15 @@ class RoomManager:
                     # Transition to new room
                     self.current_room_id = connection.to_room
 
+                    # Update main path position if we're on the main path
+                    if connection.to_room < self.main_path_length:
+                        self.main_path_position = connection.to_room
+
+                    # Track unique room visits for score
+                    if connection.to_room not in self.visited_rooms:
+                        self.visited_rooms.add(connection.to_room)
+                        self.unique_rooms_visited += 1
+
                     # Spawn player at destination portal
                     player.x = dest_portal.spawn_point.x
                     player.y = dest_portal.spawn_point.y
@@ -94,6 +113,14 @@ class RoomManager:
 
         return False
 
+    def get_main_path_progress(self) -> int:
+        """Return main path position for difficulty/progress calculations."""
+        return self.main_path_position
+
+    def get_unique_rooms_visited(self) -> int:
+        """Return total unique rooms visited for score display."""
+        return self.unique_rooms_visited
+
 
 def load_map_file(file: str):
     with open(file, "r") as f:
@@ -101,11 +128,17 @@ def load_map_file(file: str):
     return room_schema.RoomSequence.model_validate(map_json)
 
 
-def build_room_sequence(room_file: str, config: GameConfig) -> RoomSequenceFullGeometry:
-    """Load map file and build full room geometry with portals and connections"""
+def build_room_sequence(room_file: str, config: GameConfig) -> tuple[RoomSequenceFullGeometry, int]:
+    """Load map file and build full room geometry with portals and connections.
+
+    Returns:
+        Tuple of (RoomSequenceFullGeometry, main_path_length)
+    """
     room_sequence = load_map_file(room_file)
+    main_path_length = len(room_sequence.rooms)
     map_size = config.display_width
-    return room_schema.build_full_geometry(room_sequence, map_size=map_size)
+    full_geometry = room_schema.build_full_geometry(room_sequence, map_size=map_size)
+    return full_geometry, main_path_length
 
 
 def render_room(room, sprite_group, config, debug: bool = False):

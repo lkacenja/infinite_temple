@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Optional, Callable
 from datetime import datetime
 
+from tenacity import retry, stop_after_attempt, retry_if_exception_type
+
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -109,8 +111,10 @@ class TempleGenerationPipeline:
             RoomSequence with room templates
         """
         # Import here to avoid circular dependency
-        from generate_map import insert_antechambers
+        from generate_map import insert_antechambers, insert_forks
+        from infinite_temple.schema.room import validate_room_sequence
 
+        max_retries = 3
         prompt = textwrap.dedent(f"""
             # Alien Temple Room Sequence Generation
 
@@ -181,19 +185,41 @@ class TempleGenerationPipeline:
             Generate your {room_count}-room temple sequence now, ensuring all connections are valid and the path creates an interesting exploration experience that matches the temple's narrative.
         """)
 
-        response = self.client.responses.parse(
-            model=self.model,
-            reasoning={"effort": "low"},
-            input=[
-                {"role": "system", "content": "You are a level designer creating oppressive, alien temple layouts for a desolate space horror game."},
-                {"role": "user", "content": prompt},
-            ],
-            text_format=RoomSequence
+        class InvalidRoomSequenceError(Exception):
+            pass
+
+        @retry(
+            stop=stop_after_attempt(max_retries),
+            retry=retry_if_exception_type(InvalidRoomSequenceError),
+            reraise=True
         )
+        def generate_and_validate():
+            response = self.client.responses.parse(
+                model=self.model,
+                reasoning={"effort": "low"},
+                input=[
+                    {"role": "system", "content": "You are a level designer creating oppressive, alien temple layouts for a desolate space horror game."},
+                    {"role": "user", "content": prompt},
+                ],
+                text_format=RoomSequence
+            )
+
+            room_sequence = response.output_parsed
+
+            is_valid, error_msg = validate_room_sequence(room_sequence.rooms)
+            if not is_valid:
+                print(f"Room sequence validation failed: {error_msg}")
+                raise InvalidRoomSequenceError(error_msg)
+
+            return room_sequence
+
+        room_sequence = generate_and_validate()
 
         # Insert antechambers (combat rooms)
-        room_sequence = response.output_parsed
         room_sequence.rooms = insert_antechambers(room_sequence.rooms)
+
+        # Insert branching paths
+        room_sequence.branch_paths = insert_forks(room_sequence.rooms)
 
         return room_sequence
 

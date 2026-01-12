@@ -29,8 +29,7 @@ from infinite_temple.utility.menu import (
 )
 from infinite_temple.generation.pipeline import TempleGenerationPipeline
 from infinite_temple.spawning.enemy_spawner import EnemySpawner
-from infinite_temple.sprites.priest import Priest
-from infinite_temple.sprites.vision import Vision
+from infinite_temple.sprites.power_up import PowerUp
 from infinite_temple.sprites.bullet import Bullet
 
 player_max_rtspd = 10
@@ -236,8 +235,8 @@ def load_and_start_temple(temple_id):
     print(f"Rooms: {temple.room_count}")
 
     # Load temple assets
-    room_sequence = build_room_sequence(temple.map_file, config)
-    room_manager = RoomManager(room_sequence)
+    room_sequence, main_path_length = build_room_sequence(temple.map_file, config)
+    room_manager = RoomManager(room_sequence, main_path_length)
     play_music_file(temple.audio_file)
 
     # Initialize player
@@ -270,6 +269,7 @@ def load_and_start_temple(temple_id):
     # Spawn enemies for starting room
     enemy_spawner.spawn_for_room(
         room_manager.current_room_id,
+        room_manager.get_main_path_progress(),
         room,
         priest_sprites,
         vision_sprites,
@@ -288,6 +288,43 @@ def add_rubble(room_id, room_name):
         for n in range(random.randrange(3, 5)):
             rubble = Rubble(500, 500, room_id, config)
             rubble_sprites.add(rubble)
+
+
+DOUBLE_TAP_THRESHOLD = 0.3  # seconds
+last_left_press = 0
+last_right_press = 0
+
+
+def snap_to_nearest_90(current_angle, direction):
+    """
+    Snap to the next 90-degree angle in the specified direction.
+
+    Args:
+        current_angle: Current angle in degrees
+        direction: 'ccw' for counter-clockwise, 'cw' for clockwise
+
+    Returns:
+        The target 90-degree angle
+    """
+    # Normalize angle to 0-360
+    angle = current_angle % 360
+
+    # The four cardinal angles
+    cardinal_angles = [0, 90, 180, 270]
+
+    if direction == 'ccw':  # Counter-clockwise (left)
+        # Find the next angle counter-clockwise
+        for target in sorted(cardinal_angles, reverse=True):
+            if target < angle:
+                return target
+        return 270  # Wrap around to 270 if we're past 0
+
+    else:  # Clockwise (right)
+        # Find the next angle clockwise
+        for target in sorted(cardinal_angles):
+            if target > angle:
+                return target
+        return 0  # Wrap around to 0 if we're past 270
 
 
 # Initialize game state
@@ -346,9 +383,34 @@ while True:
                     if event.key == pygame.K_UP:
                         P1.thrust = True
                     if event.key == pygame.K_LEFT:
-                        P1.rtspd = -player_max_rtspd
+                        current_time = time.time()
+
+                        # Check for double-tap
+                        if current_time - last_left_press < DOUBLE_TAP_THRESHOLD:
+                            # Double-tap detected! Snap counter-clockwise
+                            target_angle = snap_to_nearest_90(P1.dir, 'ccw')
+                            P1.dir = target_angle
+                            P1.rtspd = 0  # Stop rotation
+                            last_left_press = 0  # Reset to prevent triple-tap
+                        else:
+                            # Single tap - normal rotation
+                            P1.rtspd = -player_max_rtspd
+                            last_left_press = current_time
+
                     if event.key == pygame.K_RIGHT:
-                        P1.rtspd = player_max_rtspd
+                        current_time = time.time()
+
+                        # Check for double-tap
+                        if current_time - last_right_press < DOUBLE_TAP_THRESHOLD:
+                            # Double-tap detected! Snap clockwise
+                            target_angle = snap_to_nearest_90(P1.dir, 'cw')
+                            P1.dir = target_angle
+                            P1.rtspd = 0  # Stop rotation
+                            last_right_press = 0  # Reset to prevent triple-tap
+                        else:
+                            # Single tap - normal rotation
+                            P1.rtspd = player_max_rtspd
+                            last_right_press = current_time
                     if event.key == pygame.K_SPACE:
                         P1.braking = True
 
@@ -400,7 +462,6 @@ while True:
             draw_centered_surface(config.surface, press_space, y_offset=100)
 
     elif game_state == "playing":
-
         if not P1 or not room_manager:
             # Safety check - shouldn't happen
             pass
@@ -432,6 +493,7 @@ while True:
                 # Spawn enemies for new room
                 enemy_spawner.spawn_for_room(
                     room_manager.current_room_id,
+                    room_manager.get_main_path_progress(),
                     room,
                     priest_sprites,
                     vision_sprites,
@@ -587,7 +649,7 @@ while True:
             health_bar.set_health(percent_health)
             health_bar.draw(config.surface)
 
-            progress_display.update(room_manager.current_room_id, dt)
+            progress_display.update(room_manager.get_unique_rooms_visited(), dt)
             progress_display.draw(config.surface)
 
     elif game_state == "game_over":
