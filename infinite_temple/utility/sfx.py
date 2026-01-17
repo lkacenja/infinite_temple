@@ -68,10 +68,21 @@ class SoundEffectsPlayer:
             except Exception as e:
                 print(f"Warning: Could not load {file}: {e}")
 
+        # Load explosion sounds (all variations)
+        explosion_files = glob.glob(os.path.join(asset_dir, "explosion*.wav"))
+        self.sounds['explosion'] = []
+        for file in explosion_files:
+            try:
+                sound = pygame.mixer.Sound(file)
+                self.sounds['explosion'].append(sound)
+            except Exception as e:
+                print(f"Warning: Could not load {file}: {e}")
+
         print(f"Loaded {len(self.sounds['impact'])} impact sounds")
         print(f"Loaded {len(self.sounds['collapse'])} collapse sounds")
         print(f"Loaded {len(self.sounds['priest'])} priest sounds")
         print(f"Loaded {len(self.sounds['vision'])} vision sounds")
+        print(f"Loaded {len(self.sounds['explosion'])} explosion sounds")
 
     def play_random(self, sound_type, volume=1.0):
         """
@@ -114,6 +125,10 @@ class SoundEffectsPlayer:
         """Play a random vision sound."""
         self.play_random('vision', volume)
 
+    def play_explosion(self, volume=0.6):
+        """Play the explosion sound."""
+        self.play_random('explosion', volume)
+
     def set_enabled(self, enabled):
         """Enable or disable sound effects."""
         self.enabled = enabled
@@ -146,6 +161,11 @@ def play_priest_sound(volume=0.4):
 def play_vision_sound(volume=0.4):
     """Play a random vision sound effect."""
     _sfx_player.play_vision(volume)
+
+
+def play_explosion_sound(volume=0.6):
+    """Play the explosion sound effect."""
+    _sfx_player.play_explosion(volume)
 
 
 def set_sfx_enabled(enabled):

@@ -15,7 +15,7 @@ from infinite_temple.utility.ui import HealthBar, RoomProgressDisplay, AmmoDispl
 from infinite_temple.utility.room import RoomManager, build_room_sequence, render_room
 from infinite_temple.utility.music import play_music_file
 from infinite_temple.utility.collision import *
-from infinite_temple.utility.sfx import load_sound_effects, play_impact_sound, play_collapse_sound, play_priest_sound, play_vision_sound
+from infinite_temple.utility.sfx import load_sound_effects, play_impact_sound, play_collapse_sound, play_priest_sound, play_vision_sound, play_explosion_sound
 from infinite_temple.sprites.player import Player
 from infinite_temple.sprites.rubble import Rubble
 from infinite_temple.utility.svg import draw_centered_surface, SVGLoader, render_text_fallback
@@ -483,6 +483,8 @@ while True:
         else:
             # Check for death
             if P1.current_health <= 0:
+                if death_timer == 0:
+                    play_explosion_sound(volume=0.7)
                 death_timer += dt
                 if death_timer >= DEATH_DELAY:
                     game_state = "game_over"
