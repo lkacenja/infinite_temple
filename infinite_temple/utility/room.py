@@ -30,6 +30,9 @@ class RoomManager:
         self.visited_rooms = {0}
         self.unique_rooms_visited = 1
 
+        # Track entry portal for powerup positioning
+        self.last_entry_portal = None
+
         # Build connection lookup: (room_id, portal_id) -> RoomConnection
         self.connection_map = {}
         for conn in room_sequence.connections:
@@ -95,6 +98,7 @@ class RoomManager:
 
                     # Transition to new room
                     self.current_room_id = connection.to_room
+                    self.last_entry_portal = connection.to_portal
 
                     # Update main path position if we're on the main path
                     if connection.to_room < self.main_path_length:

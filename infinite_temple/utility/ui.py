@@ -157,3 +157,35 @@ class RoomProgressDisplay:
         text_surface = scaled_font.render(text, True, text_color)
         text_rect = text_surface.get_rect(center=(self.x, self.y))
         surface.blit(text_surface, text_rect)
+
+
+class AmmoDisplay:
+    """Displays player's remaining ammo as bullet icons."""
+
+    def __init__(self, x, y):
+        """
+        Initialize the ammo display.
+
+        Args:
+            x: X position for the display
+            y: Y position for the display
+        """
+        self.x = x
+        self.y = y
+        self.ammo_count = 0
+
+    def set_ammo(self, count):
+        """Set the ammo count (0-3)."""
+        self.ammo_count = max(0, min(3, count))
+
+    def draw(self, surface):
+        """Draw the ammo display if player has ammo."""
+        if self.ammo_count <= 0:
+            return
+
+        bullet_radius = 4
+        spacing = 15
+        for i in range(self.ammo_count):
+            bx = self.x + (i * spacing)
+            pygame.draw.circle(surface, (150, 150, 150), (bx, self.y), bullet_radius)
+            pygame.draw.circle(surface, (100, 100, 100), (bx, self.y), bullet_radius, 1)

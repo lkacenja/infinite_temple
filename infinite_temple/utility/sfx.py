@@ -98,7 +98,7 @@ class SoundEffectsPlayer:
         if channel:
             channel.play(sound)
 
-    def play_impact(self, volume=0.3):
+    def play_impact(self, volume=0.5):
         """Play a random impact sound."""
         self.play_random('impact', volume)
 
@@ -128,7 +128,7 @@ def load_sound_effects(asset_dir="assets"):
     _sfx_player.load_sounds(asset_dir)
 
 
-def play_impact_sound(volume=0.3):
+def play_impact_sound(volume=0.5):
     """Play a random impact sound effect."""
     _sfx_player.play_impact(volume)
 

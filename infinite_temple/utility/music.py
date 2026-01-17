@@ -87,6 +87,7 @@ class MusicPlayer:
         # Load and play all voices simultaneously
         for i, wav_file in enumerate(self.wav_files):
             sound = pygame.mixer.Sound(wav_file)
+            sound.set_volume(0.4)
             self.sounds.append(sound)
 
             channel = pygame.mixer.Channel(i)

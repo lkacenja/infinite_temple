@@ -6,8 +6,8 @@ import pygame
 class Vision(pygame.sprite.Sprite):
     def __init__(self, x, y, room_id, config):
         pygame.sprite.Sprite.__init__(self)
-        # Random size: 3x to 7x player size
-        size_multiplier = random.uniform(3.0, 7.0)
+        # Random size: 4.5x to 10.5x player size
+        size_multiplier = random.uniform(4.5, 10.5)
         self.vision_size = config.player_size * size_multiplier
         self.surface = config.surface
         self.x = x

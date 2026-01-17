@@ -28,6 +28,7 @@ class Player(pygame.sprite.Sprite):
         self.current_health = self.max_health
         self.shield = 0
         self.ammo = 0
+        self.shield_pulse_timer = 0
 
         self.player_max_speed = 20
         self.fd_fric = 0.75
@@ -145,6 +146,11 @@ class Player(pygame.sprite.Sprite):
         # Rotate player
         self.dir += self.rtspd
 
+        # Update shield pulse animation
+        self.shield_pulse_timer += 0.1
+        if self.shield_pulse_timer >= 2 * math.pi:
+            self.shield_pulse_timer -= 2 * math.pi
+
     def drawPlayer(self):
         if self.current_health <= 0:
             # Draw fragments
@@ -187,3 +193,46 @@ class Player(pygame.sprite.Sprite):
                               y + s * math.sin(-a)),
                              (x - (s * math.sqrt(5) / 4) * math.cos(-a + math.pi / 6),
                               y + (s * math.sqrt(5) / 4) * math.sin(-a + math.pi / 6)))
+
+        # Draw shield if active
+        if self.shield > 0:
+            self._draw_shield()
+
+    def _draw_shield(self):
+        """Draw pulsing concentric rings around player when shield is active."""
+        pulse = 1 + 0.15 * math.sin(self.shield_pulse_timer)
+        base_radius = self.player_size * 1.5
+        num_segments = 16
+
+        for i in range(self.shield):
+            ring_radius = base_radius * pulse + (i * 8)
+            points = []
+            for j in range(num_segments):
+                angle = (2 * math.pi / num_segments) * j
+                px = self.x + ring_radius * math.cos(angle)
+                py = self.y + ring_radius * math.sin(angle)
+                points.append((px, py))
+
+            for j in range(num_segments):
+                start = points[j]
+                end = points[(j + 1) % num_segments]
+                pygame.draw.line(self.surface, (255, 255, 255), start, end)
+
+    def fire_bullet(self):
+        """
+        Attempt to fire a bullet in the direction player is facing.
+
+        Returns:
+            Tuple of (target_x, target_y) if ammo available, None otherwise
+        """
+        if self.ammo <= 0:
+            return None
+
+        self.ammo -= 1
+
+        # Calculate target point far in the direction player is facing
+        distance = 1000
+        target_x = self.x + distance * math.cos(math.radians(self.dir))
+        target_y = self.y + distance * math.sin(math.radians(self.dir))
+
+        return (target_x, target_y)

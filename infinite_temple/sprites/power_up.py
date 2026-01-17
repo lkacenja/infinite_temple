@@ -8,12 +8,13 @@ class PowerUp(pygame.sprite.Sprite):
     SHIELD = "S"
     AMMO = "A"
 
-    def __init__(self, x, y, power_type, config):
+    def __init__(self, x, y, power_type, room_id, config):
         pygame.sprite.Sprite.__init__(self)
         self.x = x
         self.y = y
         self.power_type = power_type
-        self.size = config.player_size
+        self.room_id = room_id
+        self.size = int(config.player_size * 1.2)
         self.surface = config.surface
         self.radius = self.size
 
@@ -86,7 +87,8 @@ class PowerUp(pygame.sprite.Sprite):
     def collect(self, player):
         """Apply power-up effect to player"""
         if self.power_type == self.HEALTH:
-            player.current_health = min(player.current_health + 25,
+            heal_amount = int(player.max_health * 0.5)
+            player.current_health = min(player.current_health + heal_amount,
                                         player.max_health)
         elif self.power_type == self.SHIELD:
             player.shield = 2

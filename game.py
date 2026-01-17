@@ -11,7 +11,7 @@ import threading
 import pygame
 from pygame.locals import *
 
-from infinite_temple.utility.ui import HealthBar, RoomProgressDisplay
+from infinite_temple.utility.ui import HealthBar, RoomProgressDisplay, AmmoDisplay
 from infinite_temple.utility.room import RoomManager, build_room_sequence, render_room
 from infinite_temple.utility.music import play_music_file
 from infinite_temple.utility.collision import *
@@ -29,6 +29,7 @@ from infinite_temple.utility.menu import (
 )
 from infinite_temple.generation.pipeline import TempleGenerationPipeline
 from infinite_temple.spawning.enemy_spawner import EnemySpawner
+from infinite_temple.spawning.powerup_spawner import PowerUpSpawner
 from infinite_temple.sprites.power_up import PowerUp
 from infinite_temple.sprites.bullet import Bullet
 
@@ -54,8 +55,11 @@ priest_sprites = None
 vision_sprites = None
 bullet_sprites = None
 enemy_spawner = None
+powerup_sprites = None
+powerup_spawner = None
 health_bar = None
 progress_display = None
+ammo_display = None
 start_screen_surface = None
 game_over_surface = None
 
@@ -221,7 +225,8 @@ def load_and_start_temple(temple_id):
     global game_state, temple, room_sequence, room_manager
     global P1, all_sprites, walls_sprites, rubble_sprites
     global priest_sprites, vision_sprites, bullet_sprites, enemy_spawner
-    global health_bar, progress_display
+    global powerup_sprites, powerup_spawner
+    global health_bar, progress_display, ammo_display
     global start_screen_surface, game_over_surface
 
     # Load temple
@@ -248,7 +253,9 @@ def load_and_start_temple(temple_id):
     priest_sprites = pygame.sprite.Group()
     vision_sprites = pygame.sprite.Group()
     bullet_sprites = pygame.sprite.Group()
+    powerup_sprites = pygame.sprite.Group()
     enemy_spawner = EnemySpawner(config)
+    powerup_spawner = PowerUpSpawner(config)
 
     # Initialize UI
     health_bar = HealthBar(10, 10, 300, 8)
@@ -257,6 +264,7 @@ def load_and_start_temple(temple_id):
         y=19,
         font_size=19
     )
+    ammo_display = AmmoDisplay(x=13, y=30)
 
     # Load SVGs
     start_screen_surface = SVGLoader().load_svg(temple.title_svg_file, width=config.display_width, height=config.display_height)
@@ -413,6 +421,13 @@ while True:
                             last_right_press = current_time
                     if event.key == pygame.K_SPACE:
                         P1.braking = True
+                    if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                        target = P1.fire_bullet()
+                        if target:
+                            bullet = Bullet(P1.x, P1.y, target[0], target[1],
+                                          room_manager.current_room_id, config, speed=12, size=3)
+                            bullet.is_player_bullet = True
+                            bullet_sprites.add(bullet)
 
         if event.type == pygame.KEYUP:
             if game_state == "playing" and P1:
@@ -498,6 +513,14 @@ while True:
                     priest_sprites,
                     vision_sprites,
                     rubble_sprites
+                )
+
+                # Spawn powerups for new room
+                powerup_spawner.spawn_for_room(
+                    room_manager.current_room_id,
+                    room,
+                    room_manager.last_entry_portal,
+                    powerup_sprites
                 )
             else:
                 # Only check collisions if we didn't transition
@@ -595,14 +618,6 @@ while True:
 
                     vision.drawVision()
 
-                    # Vision-wall collisions (stop movement)
-                    if not vision.exploded:
-                        colliding = pygame.sprite.spritecollide(vision, walls_sprites, False, wall_collision_test)
-                        if len(colliding) > 0:
-                            # Stop movement when hitting wall
-                            vision.hspeed = 0
-                            vision.vspeed = 0
-
                     # Vision fragment collisions with player
                     for frag_x, frag_y, frag_radius in vision.getFragmentPositions():
                         dx = P1.x - frag_x
@@ -615,6 +630,20 @@ while True:
                     if vision.isFinished():
                         vision_sprites.remove(vision)
 
+            # Update powerups
+            for powerup in list(powerup_sprites):
+                if powerup.room_id == room_manager.current_room_id:
+                    powerup.updatePowerUp()
+                    powerup.drawPowerUp()
+
+                    # Check collision with player
+                    dx = P1.x - powerup.x
+                    dy = P1.y - powerup.y
+                    dist = math.sqrt(dx*dx + dy*dy)
+                    if dist < P1.radius + powerup.radius:
+                        powerup.collect(P1)
+                        powerup_sprites.remove(powerup)
+
             # Update bullets
             for bullet in list(bullet_sprites):
                 if bullet.room_id == room_manager.current_room_id:
@@ -626,11 +655,49 @@ while True:
                     dy = P1.y - bullet.y
                     dist = math.sqrt(dx*dx + dy*dy)
                     if dist < P1.radius + bullet.radius:
-                        P1.current_health -= 10  # Bullet damage
+                        # Skip player's own bullets
+                        if getattr(bullet, 'is_player_bullet', False):
+                            continue
+                        # Shield absorbs priest bullets
+                        if P1.shield > 0:
+                            P1.shield -= 1
+                        else:
+                            P1.current_health -= 10
                         bullet_sprites.remove(bullet)
                         continue
 
-                    # Bullet-wall collision
+                    # Player bullet vs enemies
+                    if getattr(bullet, 'is_player_bullet', False):
+                        # Check rubble
+                        for rubble in list(rubble_sprites):
+                            if rubble.room_id == room_manager.current_room_id:
+                                dx = rubble.x - bullet.x
+                                dy = rubble.y - bullet.y
+                                dist = math.sqrt(dx*dx + dy*dy)
+                                if dist < rubble.radius + bullet.radius:
+                                    rubble_sprites.remove(rubble)
+                                    bullet_sprites.remove(bullet)
+                                    break
+                        else:
+                            # Check priests (only if bullet wasn't removed)
+                            for priest in list(priest_sprites):
+                                if priest.room_id == room_manager.current_room_id:
+                                    dx = priest.x - bullet.x
+                                    dy = priest.y - bullet.y
+                                    dist = math.sqrt(dx*dx + dy*dy)
+                                    if dist < priest.radius + bullet.radius:
+                                        priest_sprites.remove(priest)
+                                        bullet_sprites.remove(bullet)
+                                        break
+                            else:
+                                # Bullet-wall collision (only if not removed)
+                                colliding = pygame.sprite.spritecollide(bullet, walls_sprites, False, wall_collision_test)
+                                if len(colliding) > 0:
+                                    bullet_sprites.remove(bullet)
+                                    continue
+                        continue
+
+                    # Bullet-wall collision (for priest bullets)
                     colliding = pygame.sprite.spritecollide(bullet, walls_sprites, False, wall_collision_test)
                     if len(colliding) > 0:
                         bullet_sprites.remove(bullet)
@@ -651,6 +718,9 @@ while True:
 
             progress_display.update(room_manager.get_unique_rooms_visited(), dt)
             progress_display.draw(config.surface)
+
+            ammo_display.set_ammo(P1.ammo)
+            ammo_display.draw(config.surface)
 
     elif game_state == "game_over":
         # Draw game over screen SVG

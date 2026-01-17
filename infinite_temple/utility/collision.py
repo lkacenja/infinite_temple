@@ -57,7 +57,10 @@ def handle_wall_collision(player, wall):
     if isinstance(player, Player):
         top_speed = abs(max(player.vspeed, player.hspeed))
         damage = (top_speed / 20) * 50
-        player.current_health -= damage
+        if player.shield > 0:
+            player.shield -= 1
+        else:
+            player.current_health -= damage
 
     # Get wall vector
     dx = wall.coord_2.x - wall.coord_1.x
@@ -169,7 +172,10 @@ def handle_rubble_collision(player, rubble):
     if isinstance(player, Player):
         # Using similar scaling to your wall logic
         damage = (impact_speed / 20) * 50
-        player.current_health -= damage
+        if player.shield > 0:
+            player.shield -= 1
+        else:
+            player.current_health -= damage
 
     # 4. Positional Correction (Push player out)
     # We want them to be touching, not overlapping
