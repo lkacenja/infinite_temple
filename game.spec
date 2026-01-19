@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
+import os
+import glob
 
 block_cipher = None
 
@@ -7,6 +9,40 @@ block_cipher = None
 datas = [
     ('assets', 'assets'),
 ]
+
+# Find Cairo and related libraries for bundling
+binaries = []
+
+if sys.platform == 'darwin':
+    # macOS: Find homebrew libraries
+    # ARM Macs use /opt/homebrew, Intel uses /usr/local
+    homebrew_lib = '/opt/homebrew/lib' if os.path.exists('/opt/homebrew/lib') else '/usr/local/lib'
+
+    # Libraries needed for cairosvg
+    lib_patterns = [
+        'libcairo*.dylib',
+        'libpango*.dylib',
+        'libgobject*.dylib',
+        'libglib*.dylib',
+        'libfontconfig*.dylib',
+        'libfreetype*.dylib',
+        'libpixman*.dylib',
+        'libpng*.dylib',
+        'libharfbuzz*.dylib',
+        'libfribidi*.dylib',
+        'libintl*.dylib',
+    ]
+
+    for pattern in lib_patterns:
+        for lib_path in glob.glob(os.path.join(homebrew_lib, pattern)):
+            # Include both actual files and symlinks - PyInstaller will resolve them
+            if os.path.exists(lib_path):
+                binaries.append((lib_path, '.'))
+
+elif sys.platform == 'win32':
+    # Windows: GTK runtime libraries should be in PATH after choco install
+    # PyInstaller should find them automatically, but we can add hints here if needed
+    pass
 
 # Hidden imports that PyInstaller doesn't detect automatically
 hiddenimports = [
@@ -39,7 +75,7 @@ hiddenimports = [
 a = Analysis(
     ['game.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
