@@ -92,31 +92,40 @@ a = Analysis(
 
 pyz = PYZ(a.pure, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.datas,
-    [],
-    name='InfiniteTemple',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,  # No console window
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-
-# macOS app bundle
 if sys.platform == 'darwin':
-    app = BUNDLE(
+    # macOS: Use onedir mode for .app bundle
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name='InfiniteTemple',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+
+    coll = COLLECT(
         exe,
+        a.binaries,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name='InfiniteTemple',
+    )
+
+    app = BUNDLE(
+        coll,
         name='Infinite Temple.app',
         icon=None,  # Add icon later: 'assets/icon.icns'
         bundle_identifier='org.infinitetemple.game',
@@ -126,4 +135,27 @@ if sys.platform == 'darwin':
             'NSHighResolutionCapable': True,
             'CFBundleName': 'Infinite Temple',
         },
+    )
+
+else:
+    # Windows: Use onefile mode
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        [],
+        name='InfiniteTemple',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
     )

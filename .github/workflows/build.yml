@@ -35,6 +35,8 @@ jobs:
           uv sync --extra build
 
       - name: Build executable
+        env:
+          DYLD_FALLBACK_LIBRARY_PATH: /opt/homebrew/lib
         run: |
           uv run pyinstaller game.spec
 
