@@ -1,0 +1,101 @@
+name: Build Executables
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install system dependencies
+        run: |
+          brew install cairo pango gdk-pixbuf libffi
+
+      - name: Install Python dependencies
+        run: |
+          uv sync --extra build
+
+      - name: Build executable
+        run: |
+          uv run pyinstaller game.spec
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "Infinite Temple" -srcfolder "dist/Infinite Temple.app" -ov -format UDZO dist/InfiniteTemple-macOS.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InfiniteTemple-macOS
+          path: dist/InfiniteTemple-macOS.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install GTK3 Runtime (for Cairo)
+        run: |
+          choco install gtk-runtime -y
+
+      - name: Install Python dependencies
+        run: |
+          uv sync --extra build
+
+      - name: Build executable
+        run: |
+          uv run pyinstaller game.spec
+
+      - name: Create ZIP
+        run: |
+          Compress-Archive -Path dist/InfiniteTemple.exe -DestinationPath dist/InfiniteTemple-Windows.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InfiniteTemple-Windows
+          path: dist/InfiniteTemple-Windows.zip
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: InfiniteTemple-macOS
+          path: artifacts/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: InfiniteTemple-Windows
+          path: artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/InfiniteTemple-macOS.dmg
+            artifacts/InfiniteTemple-Windows.zip
+          generate_release_notes: true
