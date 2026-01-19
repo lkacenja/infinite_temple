@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from infinite_temple.schema.temple import TempleConfiguration, TempleCatalog
+from infinite_temple.paths import get_temples_dir
 
 
 class TempleRepository:
@@ -26,14 +27,17 @@ class TempleRepository:
     - Mid-run progress (permadeath)
     """
 
-    def __init__(self, base_dir: str = "maps/temples"):
+    def __init__(self, base_dir: str = None):
         """
         Initialize the temple repository.
 
         Args:
-            base_dir: Base directory containing temple folders (default: maps/temples)
+            base_dir: Base directory containing temple folders (default: from paths module)
         """
-        self.base_dir = Path(base_dir)
+        if base_dir is None:
+            self.base_dir = get_temples_dir()
+        else:
+            self.base_dir = Path(base_dir)
         self.catalog_file = self.base_dir / "catalog.json"
 
     def save_temple(self, temple: TempleConfiguration):

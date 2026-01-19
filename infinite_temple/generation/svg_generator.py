@@ -2,26 +2,19 @@
 SVG artwork generation from temple narratives.
 
 This module generates SVG artwork for title and game over screens using
-OpenAI to create visuals that match each temple's unique aesthetic.
+LLM to create visuals that match each temple's unique aesthetic.
 """
 
-import os
 import textwrap
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from pathlib import Path
 
-from openai import OpenAI
-from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from infinite_temple.schema.temple import TempleNarrative
 
-
-# Default model for SVG generation
-DEFAULT_MODEL = "gpt-5"
-
-# Load environment variables
-load_dotenv()
+if TYPE_CHECKING:
+    from infinite_temple.generation.llm_client import LLMClient
 
 
 class SVGArtwork(BaseModel):
@@ -54,22 +47,20 @@ def create_title_svg_prompt(narrative: TempleNarrative) -> str:
         **Atmosphere**: {narrative.atmosphere}
         **Backstory**: {narrative.backstory[:150]}...
 
-        ## TASK: Generate Title Screen SVG
+        ## TASK: Generate Title Screen Background SVG
 
-        Create an 800x800 SVG title screen that:
+        Create an 800x800 SVG background artwork. **DO NOT include any text** - the game UI renders the title and instructions separately.
 
         ### Visual Requirements
-        1. **Temple Title**: Display "{narrative.title}" prominently at the top (font-size: 36-48px)
-        2. **Subtitle**: "Press SPACE to begin" at the bottom (font-size: 20-24px)
-        3. **Alien Geometry**: Create abstract geometric shapes inspired by "{narrative.visual_theme}"
-        4. **Desolate Aesthetic**: Minimal color palette, stark contrasts, empty space
-        5. **Composition**: Center-focused with breathing room, not cluttered
+        1. **NO TEXT**: Do not include any text elements, titles, or labels
+        2. **Alien Geometry**: Create abstract geometric shapes inspired by "{narrative.visual_theme}"
+        3. **Desolate Aesthetic**: Minimal color palette, stark contrasts, empty space
+        4. **Composition**: Center-focused with breathing room, leave space for UI text overlay
 
         ### Color Palette (Desolate Space Horror)
         - **Background**: Deep space black (#000000 or #0a0a0a)
         - **Primary shapes**: Muted grays, deep blues, sickly greens (#2a2a2a, #1a3a4a, #2a3a2a)
         - **Accents**: Dim cyan/red for alien tech (#00cccc, #cc4444) - use sparingly
-        - **Text**: Light gray or white (#cccccc, #ffffff)
         - **Avoid**: Bright colors, warm tones, cheerful palettes
 
         ### Geometric Design Principles
@@ -83,10 +74,9 @@ def create_title_svg_prompt(narrative: TempleNarrative) -> str:
         ### Technical Requirements
         1. **Valid SVG 1.1 syntax** - must be parseable by standard SVG renderers
         2. **800x800 viewBox**: `<svg viewBox="0 0 800 800" ...>`
-        3. **Text elements**: Use standard fonts (Arial, sans-serif, monospace)
+        3. **NO TEXT ELEMENTS** - geometry only
         4. **No external resources**: No images, no external fonts, no scripts
         5. **No advanced features**: Avoid filters (except basic opacity), animations, or complex patterns
-        6. **Text readability**: Ensure text contrasts with background (add semi-transparent backgrounds if needed)
 
         ### Example Structure
 
@@ -99,19 +89,8 @@ def create_title_svg_prompt(narrative: TempleNarrative) -> str:
           <!-- Alien geometry (5-10 shapes) -->
           <polygon points="..." fill="#2a2a2a" opacity="0.8"/>
           <circle cx="..." cy="..." r="..." fill="none" stroke="#00cccc" stroke-width="2" opacity="0.6"/>
+          <path d="..." fill="none" stroke="#1a3a4a" stroke-width="1"/>
           <!-- More geometric shapes... -->
-
-          <!-- Title (prominent, top third) -->
-          <text x="400" y="250" font-family="sans-serif" font-size="42"
-                fill="#ffffff" text-anchor="middle" font-weight="bold">
-            {narrative.title}
-          </text>
-
-          <!-- Subtitle (bottom, subtle) -->
-          <text x="400" y="720" font-family="monospace" font-size="20"
-                fill="#888888" text-anchor="middle">
-            Press SPACE to begin
-          </text>
         </svg>
         ```
 
@@ -121,13 +100,14 @@ def create_title_svg_prompt(narrative: TempleNarrative) -> str:
         - **Mysterious**: Subtle details that hint at ancient purpose
         - **Hostile**: Angular, sharp, or oppressive forms
         - Match the visual theme: "{narrative.visual_theme}"
+        - **REMINDER**: No text - pure geometric artwork only
 
         ## Output Format
 
         Return ONLY the complete SVG markup as a single string in the `svg_content` field.
         Do not include markdown code blocks or explanations.
 
-        Generate the title screen SVG now.
+        Generate the title screen background SVG now.
     """)
 
     return prompt
@@ -157,22 +137,20 @@ def create_gameover_svg_prompt(narrative: TempleNarrative) -> str:
         **Visual Theme**: {narrative.visual_theme}
         **Atmosphere**: {narrative.atmosphere}
 
-        ## TASK: Generate Game Over Screen SVG
+        ## TASK: Generate Game Over Screen Background SVG
 
-        Create an 800x800 SVG game over screen that:
+        Create an 800x800 SVG background artwork. **DO NOT include any text** - the game UI renders the "GAME OVER" text and instructions separately.
 
         ### Visual Requirements
-        1. **Main Text**: "TEMPLE DEFEATED YOU" prominently displayed (font-size: 48-64px)
-        2. **Subtitle**: "Press SPACE to continue" at the bottom (font-size: 20-24px)
-        3. **Alien Geometry**: Similar to title screen but MORE OPPRESSIVE
-        4. **Defeat Aesthetic**: Darker, more claustrophobic, heavier shapes
-        5. **Visual Continuity**: Should feel related to the title screen but darker/hostile
+        1. **NO TEXT**: Do not include any text elements, titles, or labels
+        2. **Alien Geometry**: Similar to title screen but MORE OPPRESSIVE
+        3. **Defeat Aesthetic**: Darker, more claustrophobic, heavier shapes
+        4. **Visual Continuity**: Should feel related to the title screen but darker/hostile
 
         ### Color Palette (Death and Defeat)
         - **Background**: Deeper black (#000000)
         - **Primary shapes**: Darker grays, blood reds, sickly colors (#1a1a1a, #4a1a1a, #1a2a1a)
         - **Accents**: Dull red/amber warning colors (#aa3333, #aa6633) - use sparingly
-        - **Text**: Dimmer white or gray (#aaaaaa, #dddddd)
         - **Overall mood**: DARKER than title screen
 
         ### Geometric Design Principles (Game Over)
@@ -185,10 +163,9 @@ def create_gameover_svg_prompt(narrative: TempleNarrative) -> str:
         ### Technical Requirements
         1. **Valid SVG 1.1 syntax** - must be parseable by standard SVG renderers
         2. **800x800 viewBox**: `<svg viewBox="0 0 800 800" ...>`
-        3. **Text elements**: Use standard fonts (Arial, sans-serif, monospace)
+        3. **NO TEXT ELEMENTS** - geometry only
         4. **No external resources**: No images, no external fonts, no scripts
         5. **No advanced features**: Avoid filters (except basic opacity), animations, or complex patterns
-        6. **Text readability**: Ensure text contrasts with background
 
         ### Example Structure
 
@@ -201,19 +178,8 @@ def create_gameover_svg_prompt(narrative: TempleNarrative) -> str:
           <!-- Oppressive alien geometry -->
           <polygon points="..." fill="#1a1a1a" opacity="0.9"/>
           <rect x="..." y="..." width="..." height="..." fill="#4a1a1a" opacity="0.7"/>
+          <path d="..." fill="none" stroke="#aa3333" stroke-width="2"/>
           <!-- More threatening shapes... -->
-
-          <!-- Main text (center, prominent) -->
-          <text x="400" y="380" font-family="sans-serif" font-size="56"
-                fill="#aaaaaa" text-anchor="middle" font-weight="bold">
-            TEMPLE DEFEATED YOU
-          </text>
-
-          <!-- Subtitle (bottom) -->
-          <text x="400" y="720" font-family="monospace" font-size="20"
-                fill="#666666" text-anchor="middle">
-            Press SPACE to continue
-          </text>
         </svg>
         ```
 
@@ -223,13 +189,14 @@ def create_gameover_svg_prompt(narrative: TempleNarrative) -> str:
         - **Darker**: Everything is dimmer, heavier, more ominous than title screen
         - **Continuity**: Use similar geometry to title screen but transformed
         - Visual theme: "{narrative.visual_theme}" but hostile and victorious
+        - **REMINDER**: No text - pure geometric artwork only
 
         ## Output Format
 
         Return ONLY the complete SVG markup as a single string in the `svg_content` field.
         Do not include markdown code blocks or explanations.
 
-        Generate the game over screen SVG now.
+        Generate the game over screen background SVG now.
     """)
 
     return prompt
@@ -237,61 +204,46 @@ def create_gameover_svg_prompt(narrative: TempleNarrative) -> str:
 
 def generate_title_svg(
     narrative: TempleNarrative,
-    client: Optional[OpenAI] = None,
-    model: str = DEFAULT_MODEL
+    llm_client: "LLMClient" = None
 ) -> str:
     """
     Generate title screen SVG from temple narrative.
 
     Args:
         narrative: Temple narrative with visual theme and title
-        client: Optional OpenAI client instance
-        model: Model to use for generation (default: gpt-5)
+        llm_client: LLMClient instance for generation
 
     Returns:
         SVG markup as string
 
     Raises:
-        ValueError: If OPENAI_API_KEY not set
-        Exception: If SVG generation fails
+        ValueError: If no client provided or SVG generation fails
 
     Example:
-        >>> svg = generate_title_svg(narrative)
+        >>> from infinite_temple.generation.llm_client import LLMClient
+        >>> client = LLMClient(provider="anthropic")
+        >>> svg = generate_title_svg(narrative, client)
         >>> with open("title.svg", "w") as f:
         ...     f.write(svg)
     """
-    # Create client if not provided
-    if client is None:
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
-        client = OpenAI(api_key=api_key)
+    if llm_client is None:
+        raise ValueError("llm_client is required")
 
     # Generate prompt
     prompt = create_title_svg_prompt(narrative)
 
     print(f"Generating title screen SVG for: {narrative.title}")
 
-    # Call OpenAI with structured output
-    response = client.responses.parse(
-        model=model,
-        reasoning={"effort": "medium"},
-        input=[
-            {
-                "role": "system",
-                "content": "You are an expert SVG designer specializing in minimalist alien and cosmic horror aesthetics."
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        text_format=SVGArtwork
+    # Call LLM with structured output
+    result = llm_client.generate_with_schema(
+        prompt=prompt,
+        schema=SVGArtwork,
+        system="You are an expert SVG designer specializing in minimalist alien and cosmic horror aesthetics."
     )
 
-    svg_content = response.output_parsed.svg_content
+    svg_content = result.svg_content
 
-    # Unescape if needed (OpenAI may return JSON-escaped strings)
+    # Unescape if needed (LLM may return JSON-escaped strings)
     import json
     if '\\' in svg_content:
         try:
@@ -314,63 +266,60 @@ def generate_title_svg(
 
 def generate_gameover_svg(
     narrative: TempleNarrative,
-    client: Optional[OpenAI] = None,
-    model: str = DEFAULT_MODEL
+    llm_client: "LLMClient" = None
 ) -> str:
     """
     Generate game over screen SVG from temple narrative.
 
     Args:
         narrative: Temple narrative with visual theme
-        client: Optional OpenAI client instance
-        model: Model to use for generation (default: gpt-5)
+        llm_client: LLMClient instance for generation
 
     Returns:
         SVG markup as string
 
     Raises:
-        ValueError: If OPENAI_API_KEY not set
-        Exception: If SVG generation fails
+        ValueError: If no client provided or SVG generation fails
 
     Example:
-        >>> svg = generate_gameover_svg(narrative)
+        >>> from infinite_temple.generation.llm_client import LLMClient
+        >>> client = LLMClient(provider="anthropic")
+        >>> svg = generate_gameover_svg(narrative, client)
         >>> with open("gameover.svg", "w") as f:
         ...     f.write(svg)
     """
-    # Create client if not provided
-    if client is None:
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
-        client = OpenAI(api_key=api_key)
+    if llm_client is None:
+        raise ValueError("llm_client is required")
 
     # Generate prompt
     prompt = create_gameover_svg_prompt(narrative)
 
     print(f"Generating game over screen SVG for: {narrative.title}")
 
-    # Call OpenAI with structured output
-    response = client.responses.parse(
-        model=model,
-        reasoning={"effort": "medium"},
-        input=[
-            {
-                "role": "system",
-                "content": "You are an expert SVG designer specializing in dark, oppressive alien aesthetics for game over screens."
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        text_format=SVGArtwork
+    # Call LLM with structured output
+    result = llm_client.generate_with_schema(
+        prompt=prompt,
+        schema=SVGArtwork,
+        system="You are an expert SVG designer specializing in dark, oppressive alien aesthetics for game over screens."
     )
 
-    svg_content = response.output_parsed.svg_content
+    svg_content = result.svg_content
+
+    # Unescape if needed (LLM may return JSON-escaped strings)
+    import json
+    if '\\' in svg_content:
+        try:
+            svg_content = json.loads(f'"{svg_content}"')
+        except:
+            pass  # If it fails, use as-is
 
     # Basic validation
     if not svg_content.strip().startswith("<?xml") and not svg_content.strip().startswith("<svg"):
         raise ValueError("Generated content is not valid SVG")
+
+    # Add XML declaration if missing
+    if not svg_content.strip().startswith("<?xml"):
+        svg_content = '<?xml version="1.0" encoding="UTF-8"?>\n' + svg_content
 
     print(f"✓ Game over SVG generated ({len(svg_content)} bytes)")
 
@@ -381,13 +330,17 @@ if __name__ == "__main__":
     # Test SVG generation
     import sys
     from infinite_temple.generation.narrative import generate_narrative
+    from infinite_temple.generation.llm_client import LLMClient, DEFAULT_PROVIDER
 
-    if len(sys.argv) != 4:
-        print("Usage: python -m infinite_temple.generation.svg_generator <word1> <word2> <word3>")
-        print("Example: python -m infinite_temple.generation.svg_generator crystal shadow signal")
+    if len(sys.argv) < 4:
+        print("Usage: python -m infinite_temple.generation.svg_generator <word1> <word2> <word3> [provider]")
+        print("Example: python -m infinite_temple.generation.svg_generator crystal shadow signal anthropic")
         sys.exit(1)
 
     seed_words = sys.argv[1:4]
+    provider = sys.argv[4] if len(sys.argv) > 4 else DEFAULT_PROVIDER
+
+    client = LLMClient(provider=provider)
 
     print("="*80)
     print("SVG ARTWORK GENERATOR TEST")
@@ -395,21 +348,21 @@ if __name__ == "__main__":
     print()
 
     # Generate narrative first
-    narrative = generate_narrative(seed_words)
+    narrative = generate_narrative(seed_words, llm_client=client)
 
     print()
     print("Generating SVG artwork...")
     print()
 
     # Generate title SVG
-    title_svg = generate_title_svg(narrative)
+    title_svg = generate_title_svg(narrative, llm_client=client)
     title_path = Path("test_title.svg")
     with open(title_path, "w") as f:
         f.write(title_svg)
     print(f"Title SVG saved to: {title_path}")
 
     # Generate game over SVG
-    gameover_svg = generate_gameover_svg(narrative)
+    gameover_svg = generate_gameover_svg(narrative, llm_client=client)
     gameover_path = Path("test_gameover.svg")
     with open(gameover_path, "w") as f:
         f.write(gameover_svg)

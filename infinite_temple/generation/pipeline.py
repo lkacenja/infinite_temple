@@ -21,22 +21,14 @@ from datetime import datetime
 
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
-from openai import OpenAI
-from dotenv import load_dotenv
-
 from infinite_temple.schema.temple import TempleConfiguration, TempleNarrative
 from infinite_temple.schema.room import RoomSequence
 from infinite_temple.schema.audio import AmbientMusic
 from infinite_temple.generation.narrative import generate_narrative
 from infinite_temple.generation.svg_generator import generate_title_svg, generate_gameover_svg
+from infinite_temple.generation.llm_client import LLMClient, DEFAULT_PROVIDER
 from infinite_temple.persistence.temple_repository import TempleRepository
-
-
-# Default model
-DEFAULT_MODEL = "gpt-5"
-
-# Load environment variables
-load_dotenv()
+from infinite_temple.paths import get_temples_dir
 
 
 class TempleGenerationPipeline:
@@ -55,27 +47,23 @@ class TempleGenerationPipeline:
 
     def __init__(
         self,
-        client: Optional[OpenAI] = None,
-        model: str = DEFAULT_MODEL,
-        base_dir: str = "maps/temples"
+        provider: str = DEFAULT_PROVIDER,
+        base_dir: str = None
     ):
         """
         Initialize the generation pipeline.
 
         Args:
-            client: Optional OpenAI client (creates one if not provided)
-            model: Model to use for generation (default: gpt-5)
-            base_dir: Base directory for temple assets (default: maps/temples)
+            provider: LLM provider to use ("anthropic" or "openai")
+            base_dir: Base directory for temple assets (default: from paths module)
         """
-        if client is None:
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY environment variable not set")
-            client = OpenAI(api_key=api_key)
+        self.provider = provider
+        self.llm_client = LLMClient(provider=provider)
 
-        self.client = client
-        self.model = model
-        self.base_dir = Path(base_dir)
+        if base_dir is None:
+            self.base_dir = get_temples_dir()
+        else:
+            self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def _progress(self, percent: int, message: str, progress_callback: Optional[Callable] = None):
@@ -194,17 +182,11 @@ class TempleGenerationPipeline:
             reraise=True
         )
         def generate_and_validate():
-            response = self.client.responses.parse(
-                model=self.model,
-                reasoning={"effort": "low"},
-                input=[
-                    {"role": "system", "content": "You are a level designer creating oppressive, alien temple layouts for a desolate space horror game."},
-                    {"role": "user", "content": prompt},
-                ],
-                text_format=RoomSequence
+            room_sequence = self.llm_client.generate_with_schema(
+                prompt=prompt,
+                schema=RoomSequence,
+                system="You are a level designer creating oppressive, alien temple layouts for a desolate space horror game."
             )
-
-            room_sequence = response.output_parsed
 
             is_valid, error_msg = validate_room_sequence(room_sequence.rooms)
             if not is_valid:
@@ -339,16 +321,10 @@ class TempleGenerationPipeline:
             Generate the ambient music for this alien temple. The music must evoke isolation, cosmic dread, and the desolate beauty of abandoned alien monuments. Return your response as valid JSON.
         """)
 
-        response = self.client.responses.parse(
-            model=self.model,
-            reasoning={"effort": "medium"},
-            input=[
-                {"role": "user", "content": prompt},
-            ],
-            text_format=AmbientMusic
+        return self.llm_client.generate_with_schema(
+            prompt=prompt,
+            schema=AmbientMusic
         )
-
-        return response.output_parsed
 
     def generate_temple(
         self,
@@ -417,7 +393,7 @@ class TempleGenerationPipeline:
 
         # Stage 1: Generate narrative (blocking) - 20%
         self._progress(10, "Generating temple narrative...", progress_callback)
-        narrative = generate_narrative(seed_words, client=self.client, model=self.model)
+        narrative = generate_narrative(seed_words, llm_client=self.llm_client)
         narrative_file = temple_dir / "narrative.json"
         with open(narrative_file, "w") as f:
             f.write(narrative.model_dump_json(indent=2))
@@ -475,7 +451,7 @@ class TempleGenerationPipeline:
                 update_overall_progress()
 
                 title_svg_file = temple_dir / "title.svg"
-                title_svg = generate_title_svg(narrative, client=self.client, model=self.model)
+                title_svg = generate_title_svg(narrative, llm_client=self.llm_client)
                 with open(title_svg_file, "w") as f:
                     f.write(title_svg)
 
@@ -497,7 +473,7 @@ class TempleGenerationPipeline:
                 update_overall_progress()
 
                 gameover_svg_file = temple_dir / "gameover.svg"
-                gameover_svg = generate_gameover_svg(narrative, client=self.client, model=self.model)
+                gameover_svg = generate_gameover_svg(narrative, llm_client=self.llm_client)
                 with open(gameover_svg_file, "w") as f:
                     f.write(gameover_svg)
 
@@ -570,14 +546,15 @@ if __name__ == "__main__":
     # Test the pipeline
     import sys
 
-    if len(sys.argv) != 4:
-        print("Usage: python -m infinite_temple.generation.pipeline <word1> <word2> <word3>")
-        print("Example: python -m infinite_temple.generation.pipeline crystal shadow signal")
+    if len(sys.argv) < 4:
+        print("Usage: python -m infinite_temple.generation.pipeline <word1> <word2> <word3> [provider]")
+        print("Example: python -m infinite_temple.generation.pipeline crystal shadow signal anthropic")
         sys.exit(1)
 
     seed_words = sys.argv[1:4]
+    provider = sys.argv[4] if len(sys.argv) > 4 else DEFAULT_PROVIDER
 
-    pipeline = TempleGenerationPipeline()
+    pipeline = TempleGenerationPipeline(provider=provider)
     temple = pipeline.generate_temple(seed_words)
 
     print("\n" + "="*80)

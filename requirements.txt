@@ -1,5 +1,20 @@
-dotenv==0.9.9
-pip-chill==1.0.3
+# Core game
 pygame==2.6.1
+pydantic>=2.0.0
+
+# LLM generation (native SDKs)
+openai>=1.0.0
+anthropic>=0.60.0
 tenacity>=8.0.0
+
+# Audio synthesis
 tomita==0.2.0
+pedalboard>=0.9.0
+
+# SVG rendering
+cairosvg>=2.7.0
+cairocffi>=1.6.0
+Pillow>=10.0.0
+
+# Build tools
+pyinstaller>=6.0.0

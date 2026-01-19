@@ -2,24 +2,16 @@
 Narrative generation from seed words.
 
 This module generates temple narratives (title, backstory, atmosphere, visual theme)
-from three seed words using OpenAI structured output.
+from three seed words using LLM structured output.
 """
 
-import os
 import textwrap
-from typing import Optional
-
-from openai import OpenAI
-from dotenv import load_dotenv
+from typing import Optional, TYPE_CHECKING
 
 from infinite_temple.schema.temple import TempleNarrative
 
-
-# Default model for narrative generation
-DEFAULT_MODEL = "gpt-5"
-
-# Load environment variables
-load_dotenv()
+if TYPE_CHECKING:
+    from infinite_temple.generation.llm_client import LLMClient
 
 
 def create_narrative_prompt(seed_words: list[str]) -> str:
@@ -57,7 +49,7 @@ def create_narrative_prompt(seed_words: list[str]) -> str:
         - Must incorporate themes from the seed words
         - Emphasize the alien and desolate nature
 
-        ### 2. Backstory (100-500 words)
+        ### 2. Backstory (200-2000 characters)
         - Write temple lore explaining its alien origins, purpose, and current desolate state
         - Naturally integrate all three seed words into the narrative
         - Include details about:
@@ -68,7 +60,7 @@ def create_narrative_prompt(seed_words: list[str]) -> str:
         - **CRITICAL**: This is on an alien world, not Earth
         - **CRITICAL**: The builders were non-human, their motivations unknowable
         - The backstory should evoke cosmic horror and desolation
-        - Be evocative but concise - aim for 200-300 words
+        - Be evocative but concise - aim for 800-1200 characters (about 150-200 words)
 
         ### 3. Atmosphere Descriptor
         - A SHORT phrase (5-10 words) describing the oppressive mood
@@ -123,25 +115,25 @@ def create_narrative_prompt(seed_words: list[str]) -> str:
 
 def generate_narrative(
     seed_words: list[str],
-    client: Optional[OpenAI] = None,
-    model: str = DEFAULT_MODEL
+    llm_client: "LLMClient" = None
 ) -> TempleNarrative:
     """
-    Generate temple narrative from three seed words using OpenAI structured output.
+    Generate temple narrative from three seed words using LLM structured output.
 
     Args:
         seed_words: Three seed words to inspire the narrative (must be exactly 3)
-        client: Optional OpenAI client instance (creates one if not provided)
-        model: Model to use for generation (default: gpt-5)
+        llm_client: LLMClient instance for generation
 
     Returns:
         TempleNarrative with title, backstory, atmosphere, visual_theme
 
     Raises:
-        ValueError: If seed_words is not exactly 3 words
+        ValueError: If seed_words is not exactly 3 words or no client provided
 
     Example:
-        >>> narrative = generate_narrative(["crystal", "shadow", "signal"])
+        >>> from infinite_temple.generation.llm_client import LLMClient
+        >>> client = LLMClient(provider="anthropic")
+        >>> narrative = generate_narrative(["crystal", "shadow", "signal"], client)
         >>> print(narrative.title)
         "The Resonance Vault of Crystalline Silence"
     """
@@ -149,36 +141,20 @@ def generate_narrative(
     if len(seed_words) != 3:
         raise ValueError(f"Expected exactly 3 seed words, got {len(seed_words)}")
 
-    # Create client if not provided
-    if client is None:
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
-        client = OpenAI(api_key=api_key)
+    if llm_client is None:
+        raise ValueError("llm_client is required")
 
     # Generate prompt
     prompt = create_narrative_prompt(seed_words)
 
     print(f"Generating narrative from seeds: {', '.join(seed_words)}")
 
-    # Call OpenAI with structured output
-    response = client.responses.parse(
-        model=model,
-        reasoning={"effort": "medium"},
-        input=[
-            {
-                "role": "system",
-                "content": "You are a creative writer specializing in desolate space horror and cosmic dread narratives."
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        text_format=TempleNarrative
+    # Call LLM with structured output
+    narrative = llm_client.generate_with_schema(
+        prompt=prompt,
+        schema=TempleNarrative,
+        system="You are a creative writer specializing in desolate space horror and cosmic dread narratives."
     )
-
-    narrative = response.output_parsed
 
     print(f"✓ Generated narrative: {narrative.title}")
     print(f"  Atmosphere: {narrative.atmosphere}")
@@ -190,14 +166,18 @@ def generate_narrative(
 if __name__ == "__main__":
     # Test the narrative generator
     import sys
+    from infinite_temple.generation.llm_client import LLMClient, DEFAULT_PROVIDER
 
-    if len(sys.argv) != 4:
-        print("Usage: python -m infinite_temple.generation.narrative <word1> <word2> <word3>")
-        print("Example: python -m infinite_temple.generation.narrative crystal shadow signal")
+    if len(sys.argv) < 4:
+        print("Usage: python -m infinite_temple.generation.narrative <word1> <word2> <word3> [provider]")
+        print("Example: python -m infinite_temple.generation.narrative crystal shadow signal anthropic")
         sys.exit(1)
 
     seed_words = sys.argv[1:4]
-    narrative = generate_narrative(seed_words)
+    provider = sys.argv[4] if len(sys.argv) > 4 else DEFAULT_PROVIDER
+
+    client = LLMClient(provider=provider)
+    narrative = generate_narrative(seed_words, llm_client=client)
 
     print("\n" + "="*80)
     print("GENERATED NARRATIVE")

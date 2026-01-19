@@ -25,9 +25,13 @@ from infinite_temple.utility.menu import (
     TempleSelector,
     WordPicker,
     EmptyStateMenu,
-    GenerationProgressOverlay
+    GenerationProgressOverlay,
+    APIKeyInputMenu,
+    draw_temple_name
 )
+from infinite_temple.utility.config import has_api_key, get_configured_providers
 from infinite_temple.generation.pipeline import TempleGenerationPipeline
+from infinite_temple.paths import get_temples_dir, get_assets_dir
 from infinite_temple.spawning.enemy_spawner import EnemySpawner
 from infinite_temple.spawning.powerup_spawner import PowerUpSpawner
 from infinite_temple.sprites.power_up import PowerUp
@@ -62,6 +66,8 @@ progress_display = None
 ammo_display = None
 start_screen_surface = None
 game_over_surface = None
+pending_generation_words = None  # Stores words when waiting for API key
+selected_provider = None  # Stores selected LLM provider for generation
 
 
 def initialize_game_state():
@@ -72,7 +78,7 @@ def initialize_game_state():
     """
     global repo
 
-    repo = TempleRepository(base_dir="maps/temples")
+    repo = TempleRepository(base_dir=str(get_temples_dir()))
     temples = repo.list_temples(sort_by="created_at")
 
     if not temples:
@@ -93,16 +99,20 @@ def initialize_game_state():
         return "menu", menu, svg
 
 
-pygame.init()
+def init_game():
+    """Initialize pygame, load assets, and create game config."""
+    global config
 
-# Load sound effects
-load_sound_effects()
+    pygame.init()
 
-config = GameConfig(
-    display_width=800,
-    display_height=800,
-    player_size=10
-)
+    # Load sound effects
+    load_sound_effects(str(get_assets_dir()))
+
+    config = GameConfig(
+        display_width=800,
+        display_height=800,
+        player_size=10
+    )
 
 
 def update_background_svg(temple_id):
@@ -161,20 +171,65 @@ def handle_create_temple_clicked():
     menu = WordPicker(config.surface, handle_generation_started, handle_back_to_menu)
 
 
+def handle_api_key_saved(provider=None):
+    """Called when API key is saved successfully. Continue with generation."""
+    global selected_provider, pending_generation_words
+    selected_provider = provider
+    if pending_generation_words:
+        w1, w2, w3 = pending_generation_words
+        pending_generation_words = None
+        start_generation(w1, w2, w3)
+
+
+def handle_api_key_cancelled():
+    """Called when user cancels API key input. Return to word picker."""
+    global game_state, menu, pending_generation_words
+    pending_generation_words = None
+    game_state = "menu"
+    menu = WordPicker(config.surface, handle_generation_started, handle_back_to_menu)
+
+
 def handle_generation_started(word1, word2, word3):
-    """Handle temple generation start."""
-    global game_state, generation_overlay, generation_thread, generation_result, generation_error
+    """Handle temple generation start. Shows API key input if none configured."""
+    global game_state, menu, pending_generation_words, selected_provider
+
+    # Store words for after API key input (if needed)
+    pending_generation_words = (word1, word2, word3)
+
+    if not has_api_key():
+        # No API keys configured - show API key input first
+        game_state = "api_key_input"
+        menu = APIKeyInputMenu(config.surface, handle_api_key_saved, handle_api_key_cancelled)
+        return
+
+    # Use first available provider (prefer anthropic)
+    providers = get_configured_providers()
+    if "anthropic" in providers:
+        selected_provider = "anthropic"
+    else:
+        selected_provider = providers[0]
+
+    pending_generation_words = None
+    start_generation(word1, word2, word3)
+
+
+def start_generation(word1, word2, word3):
+    """Actually start the temple generation process."""
+    global game_state, generation_overlay, generation_thread, generation_result, generation_error, selected_provider
 
     game_state = "generating"
     generation_overlay = GenerationProgressOverlay(config.surface)
     generation_result = None
     generation_error = None
 
+    # Capture provider for thread
+    provider = selected_provider
+
     def generation_worker():
         """Worker thread for temple generation."""
         global generation_result, generation_error
 
-        pipeline = TempleGenerationPipeline(model="gpt-5-nano")
+        pipeline = TempleGenerationPipeline(provider=provider)
         try:
             temple_config = pipeline.generate_temple(
                 seed_words=[word1, word2, word3],
@@ -335,406 +390,429 @@ def snap_to_nearest_90(current_angle, direction):
         return 0  # Wrap around to 0 if we're past 270
 
 
-# Initialize game state
-game_state, menu, current_temple_svg = initialize_game_state()
+def main():
+    """Main game entry point."""
+    global game_state, menu, current_temple_svg, last_left_press, last_right_press
+    global generation_thread, generation_result, generation_error
 
-FramePerSec = pygame.time.Clock()
-clock = pygame.time.Clock()
+    # Initialize pygame and config
+    init_game()
 
-death_timer = 0
-DEATH_DELAY = 5.0
+    # Initialize game state
+    game_state, menu, current_temple_svg = initialize_game_state()
 
-# Main game loop
-while True:
-    dt = clock.tick(60) / 1000.0
+    FramePerSec = pygame.time.Clock()
+    clock = pygame.time.Clock()
 
-    # Handle events
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            pygame.quit()
-            sys.exit()
+    death_timer = 0
+    DEATH_DELAY = 5.0
 
-        # Menu state - pass events to menu
+    # Main game loop
+    while True:
+        dt = clock.tick(60) / 1000.0
+
+        # Handle events
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+
+            # Menu state - pass events to menu
+            if game_state == "menu":
+                menu.handle_event(event)
+
+            # Generating state - no interaction
+            elif game_state == "generating":
+                pass
+
+            # API key input state - pass events to menu
+            elif game_state == "api_key_input":
+                menu.handle_event(event)
+
+            elif event.type == pygame.KEYDOWN:
+                # Start screen controls
+                if game_state == "start_screen":
+                    if event.key == pygame.K_SPACE:
+                        game_state = "playing"
+                        death_timer = 0
+
+                # Game over controls
+                elif game_state == "game_over":
+                    if event.key == pygame.K_SPACE:
+                        # Return to menu
+                        temples = repo.list_temples(sort_by="created_at")
+                        if temples:
+                            menu = TempleSelector(
+                                config.surface,
+                                temples,
+                                handle_temple_selected,
+                                update_background_svg
+                            )
+                        else:
+                            menu = EmptyStateMenu(config.surface, handle_create_temple_clicked)
+                        game_state = "menu"
+
+                # Playing controls
+                elif game_state == "playing":
+                    if P1:
+                        if event.key == pygame.K_UP:
+                            P1.thrust = True
+                        if event.key == pygame.K_LEFT:
+                            current_time = time.time()
+
+                            # Check for double-tap
+                            if current_time - last_left_press < DOUBLE_TAP_THRESHOLD:
+                                # Double-tap detected! Snap counter-clockwise
+                                target_angle = snap_to_nearest_90(P1.dir, 'ccw')
+                                P1.dir = target_angle
+                                P1.rtspd = 0  # Stop rotation
+                                last_left_press = 0  # Reset to prevent triple-tap
+                            else:
+                                # Single tap - normal rotation
+                                P1.rtspd = -player_max_rtspd
+                                last_left_press = current_time
+
+                        if event.key == pygame.K_RIGHT:
+                            current_time = time.time()
+
+                            # Check for double-tap
+                            if current_time - last_right_press < DOUBLE_TAP_THRESHOLD:
+                                # Double-tap detected! Snap clockwise
+                                target_angle = snap_to_nearest_90(P1.dir, 'cw')
+                                P1.dir = target_angle
+                                P1.rtspd = 0  # Stop rotation
+                                last_right_press = 0  # Reset to prevent triple-tap
+                            else:
+                                # Single tap - normal rotation
+                                P1.rtspd = player_max_rtspd
+                                last_right_press = current_time
+                        if event.key == pygame.K_SPACE:
+                            P1.braking = True
+                        if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                            target = P1.fire_bullet()
+                            if target:
+                                bullet = Bullet(P1.x, P1.y, target[0], target[1],
+                                              room_manager.current_room_id, config, speed=12, size=3)
+                                bullet.is_player_bullet = True
+                                bullet_sprites.add(bullet)
+
+            if event.type == pygame.KEYUP:
+                if game_state == "playing" and P1:
+                    if event.key == pygame.K_UP:
+                        P1.thrust = False
+                    if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
+                        P1.rtspd = 0
+                    if event.key == pygame.K_SPACE:
+                        P1.braking = False
+
+        # Check for generation completion
+        if game_state == "generating" and generation_thread:
+            if not generation_thread.is_alive():
+                # Generation finished
+                if generation_result:
+                    handle_generation_complete(generation_result)
+                elif generation_error:
+                    handle_generation_error(generation_error)
+                generation_thread = None
+
+        # Clear screen
+        config.surface.fill((0, 0, 0))
+
+        # Render based on game state
         if game_state == "menu":
-            menu.handle_event(event)
+            # Draw temple background SVG
+            if current_temple_svg:
+                draw_centered_surface(config.surface, current_temple_svg)
 
-        # Generating state - no interaction
+            # Draw menu on top
+            menu.draw()
+
         elif game_state == "generating":
-            pass
+            # Draw progress overlay
+            if generation_overlay:
+                generation_overlay.draw()
 
-        elif event.type == pygame.KEYDOWN:
-            # Start screen controls
-            if game_state == "start_screen":
-                if event.key == pygame.K_SPACE:
-                    game_state = "playing"
+        elif game_state == "api_key_input":
+            # Draw API key input menu
+            menu.draw()
+
+        elif game_state == "start_screen":
+            # Draw start screen SVG
+            if start_screen_surface:
+                draw_centered_surface(config.surface, start_screen_surface)
+            else:
+                # Fallback if SVG doesn't load
+                render_text_fallback(config.surface, "INFINITE TEMPLE", 72)
+                font = pygame.font.Font(None, 36)
+                press_space = font.render("Press SPACE to start", True, (255, 255, 255))
+                draw_centered_surface(config.surface, press_space, y_offset=100)
+
+        elif game_state == "playing":
+            if not P1 or not room_manager:
+                # Safety check - shouldn't happen
+                pass
+            else:
+                # Check for death
+                if P1.current_health <= 0:
+                    if death_timer == 0:
+                        play_explosion_sound(volume=0.7)
+                    death_timer += dt
+                    if death_timer >= DEATH_DELAY:
+                        game_state = "game_over"
+                        death_timer = 0
+                else:
                     death_timer = 0
 
-            # Game over controls
-            elif game_state == "game_over":
-                if event.key == pygame.K_SPACE:
-                    # Return to menu
-                    temples = repo.list_temples(sort_by="created_at")
-                    if temples:
-                        menu = TempleSelector(
-                            config.surface,
-                            temples,
-                            handle_temple_selected,
-                            update_background_svg
-                        )
-                    else:
-                        menu = EmptyStateMenu(config.surface, handle_create_temple_clicked)
-                    game_state = "menu"
+                # Update player movement
+                P1.updatePlayer()
 
-            # Playing controls
-            elif game_state == "playing":
-                if P1:
-                    if event.key == pygame.K_UP:
-                        P1.thrust = True
-                    if event.key == pygame.K_LEFT:
-                        current_time = time.time()
+                # Check room transitions FIRST (before collision pushes player back)
+                # Portal trigger zones extend beyond room boundaries to catch player before wall collision
+                transition = room_manager.check_transition(P1, debug=False)
+                if transition:
+                    walls_sprites.empty()
+                    room = room_manager.get_current_room()
+                    render_room(room, walls_sprites, config)
 
-                        # Check for double-tap
-                        if current_time - last_left_press < DOUBLE_TAP_THRESHOLD:
-                            # Double-tap detected! Snap counter-clockwise
-                            target_angle = snap_to_nearest_90(P1.dir, 'ccw')
-                            P1.dir = target_angle
-                            P1.rtspd = 0  # Stop rotation
-                            last_left_press = 0  # Reset to prevent triple-tap
-                        else:
-                            # Single tap - normal rotation
-                            P1.rtspd = -player_max_rtspd
-                            last_left_press = current_time
+                    # Reset rubble entrance sound flags for all rubble
+                    for rubble in rubble_sprites:
+                        rubble.entrance_sound_played = False
 
-                    if event.key == pygame.K_RIGHT:
-                        current_time = time.time()
+                    # Spawn enemies for new room
+                    enemy_spawner.spawn_for_room(
+                        room_manager.current_room_id,
+                        room_manager.get_main_path_progress(),
+                        room,
+                        priest_sprites,
+                        vision_sprites,
+                        rubble_sprites
+                    )
 
-                        # Check for double-tap
-                        if current_time - last_right_press < DOUBLE_TAP_THRESHOLD:
-                            # Double-tap detected! Snap clockwise
-                            target_angle = snap_to_nearest_90(P1.dir, 'cw')
-                            P1.dir = target_angle
-                            P1.rtspd = 0  # Stop rotation
-                            last_right_press = 0  # Reset to prevent triple-tap
-                        else:
-                            # Single tap - normal rotation
-                            P1.rtspd = player_max_rtspd
-                            last_right_press = current_time
-                    if event.key == pygame.K_SPACE:
-                        P1.braking = True
-                    if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                        target = P1.fire_bullet()
-                        if target:
-                            bullet = Bullet(P1.x, P1.y, target[0], target[1],
-                                          room_manager.current_room_id, config, speed=12, size=3)
-                            bullet.is_player_bullet = True
+                    # Spawn powerups for new room
+                    powerup_spawner.spawn_for_room(
+                        room_manager.current_room_id,
+                        room,
+                        room_manager.last_entry_portal,
+                        powerup_sprites
+                    )
+                else:
+                    # Only check collisions if we didn't transition
+                    # Player-wall collision detection and response (BEFORE drawing to prevent tunneling)
+                    # Check multiple times per frame if moving fast to prevent tunneling
+                    speed = math.sqrt(P1.hspeed ** 2 + P1.vspeed ** 2)
+                    collision_iterations = max(1, int(speed / (P1.radius / 2)))
+
+                    for _ in range(collision_iterations):
+                        colliding = pygame.sprite.spritecollide(P1, walls_sprites, False, wall_collision_test)
+                        if len(colliding) > 0:
+                            play_impact_sound(volume=0.25)
+                            handle_wall_collision(P1, colliding[0])
+                            break
+
+                # Draw player
+                P1.drawPlayer()
+
+                # Update rubble
+                for rubble in rubble_sprites:
+                    if rubble.room_id == room_manager.current_room_id:
+                        # Play entrance sound once per room entry
+                        if not rubble.entrance_sound_played:
+                            play_collapse_sound(volume=0.4)
+                            rubble.entrance_sound_played = True
+
+                        rubble.updateRubble()
+                        rubble.drawRubble()
+
+                        # Rubble-wall collisions
+                        colliding = pygame.sprite.spritecollide(rubble, walls_sprites, False, wall_collision_test)
+                        if len(colliding) > 0:
+                            rubble.dir = colliding[0].angle + 90
+                            rubble.hspeed *= -1
+                            rubble.vspeed *= -1
+
+                        # Rubble-player collisions
+                        colliding = pygame.sprite.spritecollide(P1, [rubble], False, rubble_collision_test)
+                        if len(colliding) > 0:
+                            handle_rubble_collision(P1, colliding[0])
+                            play_impact_sound(volume=0.25)
+
+                # Update priests
+                player_is_moving = abs(P1.hspeed) > 0.1 or abs(P1.vspeed) > 0.1
+                for priest in priest_sprites:
+                    if priest.room_id == room_manager.current_room_id:
+                        # Store position before movement
+                        old_x = priest.x
+                        old_y = priest.y
+
+                        priest.updatePriest(P1.x, P1.y, player_is_moving)
+
+                        # Play sound when priest starts charging
+                        if priest.just_started_charging:
+                            play_priest_sound(volume=0.4)
+
+                        # Check if priest is too close to walls (within 10 pixels)
+                        # Temporarily increase radius for wall check
+                        original_radius = priest.radius
+                        priest.radius = original_radius + 10
+
+                        colliding = pygame.sprite.spritecollide(priest, walls_sprites, False, wall_collision_test)
+                        if len(colliding) > 0:
+                            # Too close to wall, revert position
+                            priest.x = old_x
+                            priest.y = old_y
+                            priest.hspeed = 0
+                            priest.vspeed = 0
+
+                        # Restore original radius
+                        priest.radius = original_radius
+
+                        priest.drawPriest()
+
+                        # Priest-player collision
+                        if rubble_collision_test(P1, priest):
+                            handle_rubble_collision(P1, priest)
+                            play_impact_sound(volume=0.25)
+
+                        # Check if priest should fire
+                        should_fire, target_x, target_y = priest.should_fire()
+                        if should_fire:
+                            bullet = Bullet(priest.x, priest.y, target_x, target_y, room_manager.current_room_id, config)
                             bullet_sprites.add(bullet)
 
-        if event.type == pygame.KEYUP:
-            if game_state == "playing" and P1:
-                if event.key == pygame.K_UP:
-                    P1.thrust = False
-                if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
-                    P1.rtspd = 0
-                if event.key == pygame.K_SPACE:
-                    P1.braking = False
+                # Update visions
+                for vision in vision_sprites:
+                    if vision.room_id == room_manager.current_room_id:
+                        vision.updateVision(dt, P1.x, P1.y)
 
-    # Check for generation completion
-    if game_state == "generating" and generation_thread:
-        if not generation_thread.is_alive():
-            # Generation finished
-            if generation_result:
-                handle_generation_complete(generation_result)
-            elif generation_error:
-                handle_generation_error(generation_error)
-            generation_thread = None
+                        # Play sound when vision explodes
+                        if vision.just_exploded:
+                            play_vision_sound(volume=0.5)
+                            vision.just_exploded = False
 
-    # Clear screen
-    config.surface.fill((0, 0, 0))
+                        vision.drawVision()
 
-    # Render based on game state
-    if game_state == "menu":
-        # Draw temple background SVG
-        if current_temple_svg:
-            draw_centered_surface(config.surface, current_temple_svg)
+                        # Vision fragment collisions with player
+                        for frag_x, frag_y, frag_radius in vision.getFragmentPositions():
+                            dx = P1.x - frag_x
+                            dy = P1.y - frag_y
+                            dist = math.sqrt(dx*dx + dy*dy)
+                            if dist < P1.radius + frag_radius:
+                                P1.current_health -= 0.5  # Damage per frame
 
-        # Draw menu on top
-        menu.draw()
+                        # Remove finished visions
+                        if vision.isFinished():
+                            vision_sprites.remove(vision)
 
-    elif game_state == "generating":
-        # Draw progress overlay
-        if generation_overlay:
-            generation_overlay.draw()
+                # Update powerups
+                for powerup in list(powerup_sprites):
+                    if powerup.room_id == room_manager.current_room_id:
+                        powerup.updatePowerUp()
+                        powerup.drawPowerUp()
 
-    elif game_state == "start_screen":
-        # Draw start screen SVG
-        if start_screen_surface:
-            draw_centered_surface(config.surface, start_screen_surface)
-        else:
-            # Fallback if SVG doesn't load
-            render_text_fallback(config.surface, "INFINITE TEMPLE", 72)
-            font = pygame.font.Font(None, 36)
-            press_space = font.render("Press SPACE to start", True, (255, 255, 255))
-            draw_centered_surface(config.surface, press_space, y_offset=100)
-
-    elif game_state == "playing":
-        if not P1 or not room_manager:
-            # Safety check - shouldn't happen
-            pass
-        else:
-            # Check for death
-            if P1.current_health <= 0:
-                if death_timer == 0:
-                    play_explosion_sound(volume=0.7)
-                death_timer += dt
-                if death_timer >= DEATH_DELAY:
-                    game_state = "game_over"
-                    death_timer = 0
-            else:
-                death_timer = 0
-
-            # Update player movement
-            P1.updatePlayer()
-
-            # Check room transitions FIRST (before collision pushes player back)
-            # Portal trigger zones extend beyond room boundaries to catch player before wall collision
-            transition = room_manager.check_transition(P1, debug=False)
-            if transition:
-                walls_sprites.empty()
-                room = room_manager.get_current_room()
-                render_room(room, walls_sprites, config)
-
-                # Reset rubble entrance sound flags for all rubble
-                for rubble in rubble_sprites:
-                    rubble.entrance_sound_played = False
-
-                # Spawn enemies for new room
-                enemy_spawner.spawn_for_room(
-                    room_manager.current_room_id,
-                    room_manager.get_main_path_progress(),
-                    room,
-                    priest_sprites,
-                    vision_sprites,
-                    rubble_sprites
-                )
-
-                # Spawn powerups for new room
-                powerup_spawner.spawn_for_room(
-                    room_manager.current_room_id,
-                    room,
-                    room_manager.last_entry_portal,
-                    powerup_sprites
-                )
-            else:
-                # Only check collisions if we didn't transition
-                # Player-wall collision detection and response (BEFORE drawing to prevent tunneling)
-                # Check multiple times per frame if moving fast to prevent tunneling
-                speed = math.sqrt(P1.hspeed ** 2 + P1.vspeed ** 2)
-                collision_iterations = max(1, int(speed / (P1.radius / 2)))
-
-                for _ in range(collision_iterations):
-                    colliding = pygame.sprite.spritecollide(P1, walls_sprites, False, wall_collision_test)
-                    if len(colliding) > 0:
-                        play_impact_sound(volume=0.25)
-                        handle_wall_collision(P1, colliding[0])
-                        break
-
-            # Draw player
-            P1.drawPlayer()
-
-            # Update rubble
-            for rubble in rubble_sprites:
-                if rubble.room_id == room_manager.current_room_id:
-                    # Play entrance sound once per room entry
-                    if not rubble.entrance_sound_played:
-                        play_collapse_sound(volume=0.4)
-                        rubble.entrance_sound_played = True
-
-                    rubble.updateRubble()
-                    rubble.drawRubble()
-
-                    # Rubble-wall collisions
-                    colliding = pygame.sprite.spritecollide(rubble, walls_sprites, False, wall_collision_test)
-                    if len(colliding) > 0:
-                        rubble.dir = colliding[0].angle + 90
-                        rubble.hspeed *= -1
-                        rubble.vspeed *= -1
-
-                    # Rubble-player collisions
-                    colliding = pygame.sprite.spritecollide(P1, [rubble], False, rubble_collision_test)
-                    if len(colliding) > 0:
-                        handle_rubble_collision(P1, colliding[0])
-                        play_impact_sound(volume=0.25)
-
-            # Update priests
-            player_is_moving = abs(P1.hspeed) > 0.1 or abs(P1.vspeed) > 0.1
-            for priest in priest_sprites:
-                if priest.room_id == room_manager.current_room_id:
-                    # Store position before movement
-                    old_x = priest.x
-                    old_y = priest.y
-
-                    priest.updatePriest(P1.x, P1.y, player_is_moving)
-
-                    # Play sound when priest starts charging
-                    if priest.just_started_charging:
-                        play_priest_sound(volume=0.4)
-
-                    # Check if priest is too close to walls (within 10 pixels)
-                    # Temporarily increase radius for wall check
-                    original_radius = priest.radius
-                    priest.radius = original_radius + 10
-
-                    colliding = pygame.sprite.spritecollide(priest, walls_sprites, False, wall_collision_test)
-                    if len(colliding) > 0:
-                        # Too close to wall, revert position
-                        priest.x = old_x
-                        priest.y = old_y
-                        priest.hspeed = 0
-                        priest.vspeed = 0
-
-                    # Restore original radius
-                    priest.radius = original_radius
-
-                    priest.drawPriest()
-
-                    # Priest-player collision
-                    if rubble_collision_test(P1, priest):
-                        handle_rubble_collision(P1, priest)
-                        play_impact_sound(volume=0.25)
-
-                    # Check if priest should fire
-                    should_fire, target_x, target_y = priest.should_fire()
-                    if should_fire:
-                        bullet = Bullet(priest.x, priest.y, target_x, target_y, room_manager.current_room_id, config)
-                        bullet_sprites.add(bullet)
-
-            # Update visions
-            for vision in vision_sprites:
-                if vision.room_id == room_manager.current_room_id:
-                    vision.updateVision(dt, P1.x, P1.y)
-
-                    # Play sound when vision explodes
-                    if vision.just_exploded:
-                        play_vision_sound(volume=0.5)
-                        vision.just_exploded = False
-
-                    vision.drawVision()
-
-                    # Vision fragment collisions with player
-                    for frag_x, frag_y, frag_radius in vision.getFragmentPositions():
-                        dx = P1.x - frag_x
-                        dy = P1.y - frag_y
+                        # Check collision with player
+                        dx = P1.x - powerup.x
+                        dy = P1.y - powerup.y
                         dist = math.sqrt(dx*dx + dy*dy)
-                        if dist < P1.radius + frag_radius:
-                            P1.current_health -= 0.5  # Damage per frame
+                        if dist < P1.radius + powerup.radius:
+                            powerup.collect(P1)
+                            powerup_sprites.remove(powerup)
 
-                    # Remove finished visions
-                    if vision.isFinished():
-                        vision_sprites.remove(vision)
+                # Update bullets
+                for bullet in list(bullet_sprites):
+                    if bullet.room_id == room_manager.current_room_id:
+                        bullet.updateBullet()
+                        bullet.drawBullet()
 
-            # Update powerups
-            for powerup in list(powerup_sprites):
-                if powerup.room_id == room_manager.current_room_id:
-                    powerup.updatePowerUp()
-                    powerup.drawPowerUp()
-
-                    # Check collision with player
-                    dx = P1.x - powerup.x
-                    dy = P1.y - powerup.y
-                    dist = math.sqrt(dx*dx + dy*dy)
-                    if dist < P1.radius + powerup.radius:
-                        powerup.collect(P1)
-                        powerup_sprites.remove(powerup)
-
-            # Update bullets
-            for bullet in list(bullet_sprites):
-                if bullet.room_id == room_manager.current_room_id:
-                    bullet.updateBullet()
-                    bullet.drawBullet()
-
-                    # Bullet-player collision
-                    dx = P1.x - bullet.x
-                    dy = P1.y - bullet.y
-                    dist = math.sqrt(dx*dx + dy*dy)
-                    if dist < P1.radius + bullet.radius:
-                        # Skip player's own bullets
-                        if getattr(bullet, 'is_player_bullet', False):
+                        # Bullet-player collision
+                        dx = P1.x - bullet.x
+                        dy = P1.y - bullet.y
+                        dist = math.sqrt(dx*dx + dy*dy)
+                        if dist < P1.radius + bullet.radius:
+                            # Skip player's own bullets
+                            if getattr(bullet, 'is_player_bullet', False):
+                                continue
+                            # Shield absorbs priest bullets
+                            if P1.shield > 0:
+                                P1.shield -= 1
+                            else:
+                                P1.current_health -= 10
+                            bullet_sprites.remove(bullet)
                             continue
-                        # Shield absorbs priest bullets
-                        if P1.shield > 0:
-                            P1.shield -= 1
-                        else:
-                            P1.current_health -= 10
-                        bullet_sprites.remove(bullet)
-                        continue
 
-                    # Player bullet vs enemies
-                    if getattr(bullet, 'is_player_bullet', False):
-                        # Check rubble
-                        for rubble in list(rubble_sprites):
-                            if rubble.room_id == room_manager.current_room_id:
-                                dx = rubble.x - bullet.x
-                                dy = rubble.y - bullet.y
-                                dist = math.sqrt(dx*dx + dy*dy)
-                                if dist < rubble.radius + bullet.radius:
-                                    rubble_sprites.remove(rubble)
-                                    bullet_sprites.remove(bullet)
-                                    break
-                        else:
-                            # Check priests (only if bullet wasn't removed)
-                            for priest in list(priest_sprites):
-                                if priest.room_id == room_manager.current_room_id:
-                                    dx = priest.x - bullet.x
-                                    dy = priest.y - bullet.y
+                        # Player bullet vs enemies
+                        if getattr(bullet, 'is_player_bullet', False):
+                            # Check rubble
+                            for rubble in list(rubble_sprites):
+                                if rubble.room_id == room_manager.current_room_id:
+                                    dx = rubble.x - bullet.x
+                                    dy = rubble.y - bullet.y
                                     dist = math.sqrt(dx*dx + dy*dy)
-                                    if dist < priest.radius + bullet.radius:
-                                        priest_sprites.remove(priest)
+                                    if dist < rubble.radius + bullet.radius:
+                                        rubble_sprites.remove(rubble)
                                         bullet_sprites.remove(bullet)
                                         break
                             else:
-                                # Bullet-wall collision (only if not removed)
-                                colliding = pygame.sprite.spritecollide(bullet, walls_sprites, False, wall_collision_test)
-                                if len(colliding) > 0:
-                                    bullet_sprites.remove(bullet)
-                                    continue
-                        continue
+                                # Check priests (only if bullet wasn't removed)
+                                for priest in list(priest_sprites):
+                                    if priest.room_id == room_manager.current_room_id:
+                                        dx = priest.x - bullet.x
+                                        dy = priest.y - bullet.y
+                                        dist = math.sqrt(dx*dx + dy*dy)
+                                        if dist < priest.radius + bullet.radius:
+                                            priest_sprites.remove(priest)
+                                            bullet_sprites.remove(bullet)
+                                            break
+                                else:
+                                    # Bullet-wall collision (only if not removed)
+                                    colliding = pygame.sprite.spritecollide(bullet, walls_sprites, False, wall_collision_test)
+                                    if len(colliding) > 0:
+                                        bullet_sprites.remove(bullet)
+                                        continue
+                            continue
 
-                    # Bullet-wall collision (for priest bullets)
-                    colliding = pygame.sprite.spritecollide(bullet, walls_sprites, False, wall_collision_test)
-                    if len(colliding) > 0:
-                        bullet_sprites.remove(bullet)
-                        continue
+                        # Bullet-wall collision (for priest bullets)
+                        colliding = pygame.sprite.spritecollide(bullet, walls_sprites, False, wall_collision_test)
+                        if len(colliding) > 0:
+                            bullet_sprites.remove(bullet)
+                            continue
 
-                    # Remove bullets that go off screen
-                    if bullet.is_off_screen(config.display_width):
-                        bullet_sprites.remove(bullet)
+                        # Remove bullets that go off screen
+                        if bullet.is_off_screen(config.display_width):
+                            bullet_sprites.remove(bullet)
 
-            # Draw walls
-            for wall in walls_sprites:
-                wall.drawWall()
+                # Draw walls
+                for wall in walls_sprites:
+                    wall.drawWall()
 
-            # Draw UI
-            percent_health = (P1.current_health / P1.max_health if P1.current_health > 0 else 0) * 100
-            health_bar.set_health(percent_health)
-            health_bar.draw(config.surface)
+                # Draw UI
+                if temple:
+                    draw_temple_name(config.surface, temple.narrative.title)
 
-            progress_display.update(room_manager.get_unique_rooms_visited(), dt)
-            progress_display.draw(config.surface)
+                percent_health = (P1.current_health / P1.max_health if P1.current_health > 0 else 0) * 100
+                health_bar.set_health(percent_health)
+                health_bar.draw(config.surface)
 
-            ammo_display.set_ammo(P1.ammo)
-            ammo_display.draw(config.surface)
+                progress_display.update(room_manager.get_unique_rooms_visited(), dt)
+                progress_display.draw(config.surface)
 
-    elif game_state == "game_over":
-        # Draw game over screen SVG
-        if game_over_surface:
-            draw_centered_surface(config.surface, game_over_surface)
-        else:
-            # Fallback if SVG doesn't load
-            render_text_fallback(config.surface, "GAME OVER", 72)
-            font = pygame.font.Font(None, 36)
-            press_space = font.render("Press SPACE to continue", True, (255, 255, 255))
-            draw_centered_surface(config.surface, press_space, y_offset=100)
+                ammo_display.set_ammo(P1.ammo)
+                ammo_display.draw(config.surface)
 
-    # Update display
-    pygame.display.update()
-    FramePerSec.tick(30)
+        elif game_state == "game_over":
+            # Draw game over screen SVG
+            if game_over_surface:
+                draw_centered_surface(config.surface, game_over_surface)
+            else:
+                # Fallback if SVG doesn't load
+                render_text_fallback(config.surface, "GAME OVER", 72)
+                font = pygame.font.Font(None, 36)
+                press_space = font.render("Press SPACE to continue", True, (255, 255, 255))
+                draw_centered_surface(config.surface, press_space, y_offset=100)
+
+        # Update display
+        pygame.display.update()
+        FramePerSec.tick(30)
+
+
+if __name__ == "__main__":
+    main()

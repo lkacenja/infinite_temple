@@ -16,9 +16,9 @@ class TempleNarrative(BaseModel):
         description="Evocative temple name (e.g., 'The Sunken Sanctuary of Whispers')"
     )
     backstory: str = Field(
-        min_length=100,
-        max_length=500,
-        description="Temple lore/history that informs atmosphere and design"
+        min_length=200,
+        max_length=2000,
+        description="Temple lore/history that informs atmosphere and design (200-2000 characters)"
     )
     atmosphere: str = Field(
         description="Short atmospheric descriptor for music generation (e.g., 'dark and dusty stone passages')"
