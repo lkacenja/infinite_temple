@@ -61,9 +61,14 @@ jobs:
       - name: Set up Python
         run: uv python install 3.11
 
-      - name: Install GTK3 Runtime (for Cairo)
+      - name: Download Cairo/GTK libraries
         run: |
-          choco install gtk-runtime -y
+          mkdir -p build_libs
+          $url = "https://github.com/nicovank/gtk/releases/download/v1.17.2/gtk-3.24.24-windows-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "build_libs/gtk.zip"
+          Expand-Archive -Path "build_libs/gtk.zip" -DestinationPath "build_libs/gtk" -Force
+          echo "GTK libraries downloaded to build_libs/gtk/bin"
+          ls build_libs/gtk/bin/*.dll | Select-Object -First 10
 
       - name: Install Python dependencies
         run: |
