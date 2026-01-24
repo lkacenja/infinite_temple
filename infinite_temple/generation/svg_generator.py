@@ -238,7 +238,8 @@ def generate_title_svg(
     result = llm_client.generate_with_schema(
         prompt=prompt,
         schema=SVGArtwork,
-        system="You are an expert SVG designer specializing in minimalist alien and cosmic horror aesthetics."
+        system="You are an expert SVG designer specializing in minimalist alien and cosmic horror aesthetics.",
+        reasoning_effort="high"
     )
 
     svg_content = result.svg_content
@@ -300,7 +301,8 @@ def generate_gameover_svg(
     result = llm_client.generate_with_schema(
         prompt=prompt,
         schema=SVGArtwork,
-        system="You are an expert SVG designer specializing in dark, oppressive alien aesthetics for game over screens."
+        system="You are an expert SVG designer specializing in dark, oppressive alien aesthetics for game over screens.",
+        reasoning_effort="high"
     )
 
     svg_content = result.svg_content

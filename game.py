@@ -543,9 +543,23 @@ def main():
             else:
                 # Fallback if SVG doesn't load
                 render_text_fallback(config.surface, "INFINITE TEMPLE", 72)
-                font = pygame.font.Font(None, 36)
-                press_space = font.render("Press SPACE to start", True, (255, 255, 255))
-                draw_centered_surface(config.surface, press_space, y_offset=100)
+
+            # Overlay temple title with black background
+            if temple:
+                title_font = pygame.font.Font(None, 32)
+                title_text = title_font.render(temple.narrative.title, True, (255, 255, 255))
+                title_rect = title_text.get_rect(center=(config.display_width // 2, 80))
+                bg_rect = title_rect.inflate(20, 10)
+                pygame.draw.rect(config.surface, (0, 0, 0), bg_rect)
+                config.surface.blit(title_text, title_rect)
+
+            # "Press space to begin" at bottom with black background
+            small_font = pygame.font.Font(None, 18)
+            press_text = small_font.render("Press space to begin", True, (255, 255, 255))
+            press_rect = press_text.get_rect(center=(config.display_width // 2, config.display_height - 50))
+            press_bg_rect = press_rect.inflate(20, 10)
+            pygame.draw.rect(config.surface, (0, 0, 0), press_bg_rect)
+            config.surface.blit(press_text, press_rect)
 
         elif game_state == "playing":
             if not P1 or not room_manager:
@@ -785,9 +799,6 @@ def main():
                     wall.drawWall()
 
                 # Draw UI
-                if temple:
-                    draw_temple_name(config.surface, temple.narrative.title)
-
                 percent_health = (P1.current_health / P1.max_health if P1.current_health > 0 else 0) * 100
                 health_bar.set_health(percent_health)
                 health_bar.draw(config.surface)

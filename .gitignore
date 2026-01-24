@@ -59,3 +59,7 @@ venv.bak/
 *.sublime-project
 *.sublime-workspace
 maps
+
+# AI
+.claude
+CLAUDE.md

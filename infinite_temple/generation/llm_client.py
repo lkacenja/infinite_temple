@@ -26,7 +26,7 @@ PROVIDERS = {
     },
     "openai": {
         "name": "OpenAI",
-        "default_model": "gpt-4o",
+        "default_model": "gpt-5",
         "key_name": "openai",
     },
 }
@@ -94,6 +94,7 @@ class LLMClient:
         prompt: str,
         schema: Type[T],
         system: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> T:
         """
         Generate structured output matching a Pydantic schema.
@@ -102,12 +103,13 @@ class LLMClient:
             prompt: The user prompt
             schema: Pydantic model class for the response
             system: Optional system message
+            reasoning_effort: Reasoning effort level for OpenAI models ("low", "medium", "high")
 
         Returns:
             Instance of the schema class
         """
         if self.provider == "openai":
-            return self._generate_openai(prompt, schema, system)
+            return self._generate_openai(prompt, schema, system, reasoning_effort)
         else:
             return self._generate_anthropic(prompt, schema, system)
 
@@ -116,6 +118,7 @@ class LLMClient:
         prompt: str,
         schema: Type[T],
         system: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> T:
         """Generate using OpenAI's responses.parse() API."""
         input_messages = []
@@ -123,11 +126,16 @@ class LLMClient:
             input_messages.append({"role": "system", "content": system})
         input_messages.append({"role": "user", "content": prompt})
 
-        response = self.client.responses.parse(
-            model=self.model_id,
-            input=input_messages,
-            text_format=schema,
-        )
+        kwargs = {
+            "model": self.model_id,
+            "input": input_messages,
+            "text_format": schema,
+        }
+
+        if reasoning_effort:
+            kwargs["reasoning"] = {"effort": reasoning_effort}
+
+        response = self.client.responses.parse(**kwargs)
 
         return response.output_parsed
 

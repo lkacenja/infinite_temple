@@ -153,7 +153,8 @@ def generate_narrative(
     narrative = llm_client.generate_with_schema(
         prompt=prompt,
         schema=TempleNarrative,
-        system="You are a creative writer specializing in desolate space horror and cosmic dread narratives."
+        system="You are a creative writer specializing in desolate space horror and cosmic dread narratives.",
+        reasoning_effort="medium"
     )
 
     print(f"✓ Generated narrative: {narrative.title}")

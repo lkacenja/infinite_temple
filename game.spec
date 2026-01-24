@@ -40,9 +40,44 @@ if sys.platform == 'darwin':
                 binaries.append((lib_path, '.'))
 
 elif sys.platform == 'win32':
-    # Windows: GTK runtime libraries should be in PATH after choco install
-    # PyInstaller should find them automatically, but we can add hints here if needed
-    pass
+    # Windows: Find Cairo and related DLLs
+    # Common install locations: MSYS2, GTK3-Runtime (chocolatey), manual GTK install
+    win_lib_paths = [
+        r'C:\msys64\mingw64\bin',
+        r'C:\GTK\bin',
+        r'C:\Program Files\GTK3-Runtime Win64\bin',
+        r'C:\Program Files (x86)\GTK3-Runtime\bin',
+    ]
+
+    # Also check PATH
+    path_dirs = os.environ.get('PATH', '').split(os.pathsep)
+    win_lib_paths.extend(path_dirs)
+
+    dll_patterns = [
+        'libcairo-2.dll',
+        'libpango*.dll',
+        'libgobject*.dll',
+        'libglib*.dll',
+        'libfontconfig*.dll',
+        'libfreetype*.dll',
+        'libpixman*.dll',
+        'libpng*.dll',
+        'libharfbuzz*.dll',
+        'libfribidi*.dll',
+        'libintl*.dll',
+        'zlib*.dll',
+        'libffi*.dll',
+    ]
+
+    for lib_dir in win_lib_paths:
+        if os.path.isdir(lib_dir):
+            for pattern in dll_patterns:
+                for dll_path in glob.glob(os.path.join(lib_dir, pattern)):
+                    if os.path.isfile(dll_path):
+                        binaries.append((dll_path, '.'))
+            # If we found cairo, we likely have all deps from this dir
+            if os.path.exists(os.path.join(lib_dir, 'libcairo-2.dll')):
+                break
 
 # Hidden imports that PyInstaller doesn't detect automatically
 hiddenimports = [

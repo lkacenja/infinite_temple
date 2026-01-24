@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Optional, Callable
 from datetime import datetime
 
-from tenacity import retry, stop_after_attempt, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, retry_if_exception_type, before_sleep_log
+import logging
 
 from infinite_temple.schema.temple import TempleConfiguration, TempleNarrative
 from infinite_temple.schema.room import RoomSequence
@@ -98,11 +99,10 @@ class TempleGenerationPipeline:
         Returns:
             RoomSequence with room templates
         """
-        # Import here to avoid circular dependency
-        from generate_map import insert_antechambers, insert_forks
+        from infinite_temple.generation.room_sequence import insert_antechambers, insert_forks
         from infinite_temple.schema.room import validate_room_sequence
 
-        max_retries = 3
+        max_retries = 5
         prompt = textwrap.dedent(f"""
             # Alien Temple Room Sequence Generation
 
@@ -176,23 +176,35 @@ class TempleGenerationPipeline:
         class InvalidRoomSequenceError(Exception):
             pass
 
+        attempt_count = 0
+
+        def log_retry(retry_state):
+            print(f"  Retrying room sequence generation (attempt {retry_state.attempt_number + 1}/{max_retries})...")
+
         @retry(
             stop=stop_after_attempt(max_retries),
             retry=retry_if_exception_type(InvalidRoomSequenceError),
+            before_sleep=log_retry,
             reraise=True
         )
         def generate_and_validate():
+            nonlocal attempt_count
+            attempt_count += 1
+            print(f"Generating room sequence (attempt {attempt_count}/{max_retries})...")
+
             room_sequence = self.llm_client.generate_with_schema(
                 prompt=prompt,
                 schema=RoomSequence,
-                system="You are a level designer creating oppressive, alien temple layouts for a desolate space horror game."
+                system="You are a level designer creating oppressive, alien temple layouts for a desolate space horror game.",
+                reasoning_effort="high"
             )
 
             is_valid, error_msg = validate_room_sequence(room_sequence.rooms)
             if not is_valid:
-                print(f"Room sequence validation failed: {error_msg}")
+                print(f"  ✗ Validation failed: {error_msg}")
                 raise InvalidRoomSequenceError(error_msg)
 
+            print(f"  ✓ Room sequence validated ({len(room_sequence.rooms)} rooms)")
             return room_sequence
 
         room_sequence = generate_and_validate()
@@ -323,7 +335,8 @@ class TempleGenerationPipeline:
 
         return self.llm_client.generate_with_schema(
             prompt=prompt,
-            schema=AmbientMusic
+            schema=AmbientMusic,
+            reasoning_effort="high"
         )
 
     def generate_temple(
