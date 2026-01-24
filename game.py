@@ -13,7 +13,7 @@ from pygame.locals import *
 
 from infinite_temple.utility.ui import HealthBar, RoomProgressDisplay, AmmoDisplay
 from infinite_temple.utility.room import RoomManager, build_room_sequence, render_room
-from infinite_temple.utility.music import play_music_file, set_music_effect_level
+from infinite_temple.utility.music import play_music_file, set_music_effect_level, stop_music
 from infinite_temple.utility.difficulty import calculate_difficulty
 from infinite_temple.utility.collision import *
 from infinite_temple.utility.sfx import load_sound_effects, play_impact_sound, play_collapse_sound, play_priest_sound, play_vision_sound, play_explosion_sound
@@ -440,7 +440,8 @@ def main():
                 # Game over controls
                 elif game_state == "game_over":
                     if event.key == pygame.K_SPACE:
-                        # Return to menu
+                        # Stop music and return to menu
+                        stop_music()
                         temples = repo.list_temples(sort_by="created_at")
                         if temples:
                             menu = TempleSelector(

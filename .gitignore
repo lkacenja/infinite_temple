@@ -63,3 +63,6 @@ maps
 # AI
 .claude
 CLAUDE.md
+
+# Build dependencies (downloaded at build time)
+build_libs/

@@ -209,6 +209,11 @@ def play_music_file(file: str):
     play_music_from_dict(audio_model.model_dump())
 
 
+def stop_music():
+    """Stop all playing music."""
+    _music_player.stop()
+
+
 def set_music_effect_level(difficulty: int):
     """
     Set music effect level based on game difficulty.
@@ -217,8 +222,10 @@ def set_music_effect_level(difficulty: int):
         difficulty: Current difficulty level (0-10)
     """
     if difficulty >= 6:
-        _music_player.set_effect_level(MusicPlayer.EFFECT_HEAVY)
+        level = MusicPlayer.EFFECT_HEAVY
     elif difficulty >= 3:
-        _music_player.set_effect_level(MusicPlayer.EFFECT_MEDIUM)
+        level = MusicPlayer.EFFECT_MEDIUM
     else:
-        _music_player.set_effect_level(MusicPlayer.EFFECT_NONE)
+        level = MusicPlayer.EFFECT_NONE
+
+    _music_player.set_effect_level(level)
