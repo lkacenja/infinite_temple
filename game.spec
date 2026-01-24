@@ -2,16 +2,29 @@
 import sys
 import os
 import glob
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+import certifi
 
 block_cipher = None
+
+# Collect all submodules and data for packages with native components
+pygame_datas = collect_data_files('pygame')
+pygame_binaries = collect_dynamic_libs('pygame')
+pedalboard_binaries = collect_dynamic_libs('pedalboard')
+numpy_binaries = collect_dynamic_libs('numpy')
 
 # Bundle assets with the executable
 datas = [
     ('assets', 'assets'),
+    (certifi.where(), 'certifi'),  # CA certificates for HTTPS
 ]
+datas += pygame_datas
 
 # Find Cairo and related libraries for bundling
 binaries = []
+binaries += pygame_binaries
+binaries += pedalboard_binaries
+binaries += numpy_binaries
 
 if sys.platform == 'darwin':
     # macOS: Find homebrew libraries
@@ -84,25 +97,48 @@ elif sys.platform == 'win32':
 hiddenimports = [
     # SVG rendering
     'cairosvg',
+    'cairosvg.surface',
+    'cairosvg.parser',
     'cairocffi',
+    'cairocffi.ffi',
     'PIL',
     'PIL.Image',
     # Pydantic
     'pydantic',
     'pydantic.deprecated.decorator',
     'pydantic_core',
+    'pydantic_core._pydantic_core',
     # Game engine
     'pygame',
     'pygame.locals',
+    'pygame.mixer',
+    'pygame.font',
+    'pygame.display',
+    'pygame.event',
+    'pygame.image',
+    'pygame.draw',
+    'pygame.transform',
+    'pygame.time',
+    'pygame.math',
     # Audio synthesis
     'tomita',
     'tomita.legacy',
     'tomita.legacy.pysynth_c',
+    # Audio effects
     'pedalboard',
+    'pedalboard.io',
+    'pedalboard_native',
+    'numpy',
     # LLM
     'openai',
     'anthropic',
+    'httpx',
+    'httpcore',
+    'h11',
     'tenacity',
+    # Networking
+    'certifi',
+    'ssl',
     # Standard library used dynamically
     'json',
     'pathlib',
