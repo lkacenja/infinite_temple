@@ -56,7 +56,7 @@ elif sys.platform == 'win32':
     # Windows: Find Cairo and related DLLs
     # Check build_libs first (downloaded by 'make build-deps'), then common install locations
     win_lib_paths = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'build_libs', 'gtk', 'bin'),
+        os.path.join(os.getcwd(), 'build_libs', 'gtk', 'bin'),
         r'C:\msys64\mingw64\bin',
         r'C:\GTK\bin',
         r'C:\Program Files\GTK3-Runtime Win64\bin',
