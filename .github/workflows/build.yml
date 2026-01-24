@@ -61,14 +61,18 @@ jobs:
       - name: Set up Python
         run: uv python install 3.11
 
-      - name: Download Cairo/GTK libraries
+      - name: Download Cairo libraries
         run: |
-          mkdir -p build_libs
-          $url = "https://github.com/nicovank/gtk/releases/download/v1.17.2/gtk-3.24.24-windows-x64.zip"
-          Invoke-WebRequest -Uri $url -OutFile "build_libs/gtk.zip"
-          Expand-Archive -Path "build_libs/gtk.zip" -DestinationPath "build_libs/gtk" -Force
-          echo "GTK libraries downloaded to build_libs/gtk/bin"
-          ls build_libs/gtk/bin/*.dll | Select-Object -First 10
+          mkdir build_libs
+          $url = "https://github.com/preshing/cairo-windows/releases/download/with-tee/cairo-windows-1.17.2.zip"
+          Invoke-WebRequest -Uri $url -OutFile "build_libs/cairo.zip"
+          Expand-Archive -Path "build_libs/cairo.zip" -DestinationPath "build_libs" -Force
+          # Create gtk/bin structure expected by game.spec
+          mkdir build_libs/gtk
+          mkdir build_libs/gtk/bin
+          Copy-Item "build_libs/cairo-windows-1.17.2/lib/x64/cairo.dll" "build_libs/gtk/bin/libcairo-2.dll"
+          echo "Cairo libraries:"
+          ls build_libs/gtk/bin/
 
       - name: Install Python dependencies
         run: |

@@ -34,16 +34,18 @@ else
 endif
 
 # Download native build dependencies (Windows only)
-# Downloads Cairo and GTK DLLs needed for cairosvg
-CAIRO_VERSION = 1.17.2
-GTK_BUNDLE_URL = https://github.com/nicovank/gtk/releases/download/v$(CAIRO_VERSION)/gtk-3.24.24-windows-x64.zip
+# Downloads Cairo DLL needed for cairosvg
+CAIRO_URL = https://github.com/preshing/cairo-windows/releases/download/with-tee/cairo-windows-1.17.2.zip
 
 build-deps:
 ifeq ($(OS),Windows_NT)
-	@echo "Downloading Cairo/GTK libraries for Windows..."
+	@echo "Downloading Cairo libraries for Windows..."
 	@if not exist "build_libs" mkdir build_libs
-	powershell -Command "Invoke-WebRequest -Uri '$(GTK_BUNDLE_URL)' -OutFile 'build_libs/gtk.zip'"
-	powershell -Command "Expand-Archive -Path 'build_libs/gtk.zip' -DestinationPath 'build_libs/gtk' -Force"
+	@if not exist "build_libs\gtk" mkdir build_libs\gtk
+	@if not exist "build_libs\gtk\bin" mkdir build_libs\gtk\bin
+	powershell -Command "Invoke-WebRequest -Uri '$(CAIRO_URL)' -OutFile 'build_libs/cairo.zip'"
+	powershell -Command "Expand-Archive -Path 'build_libs/cairo.zip' -DestinationPath 'build_libs' -Force"
+	powershell -Command "Copy-Item 'build_libs/cairo-windows-1.17.2/lib/x64/cairo.dll' 'build_libs/gtk/bin/libcairo-2.dll'"
 	@echo "Cairo libraries downloaded to build_libs/gtk/bin"
 else
 	@echo "build-deps is only needed on Windows"
