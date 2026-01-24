@@ -48,11 +48,12 @@ class EnemySpawner:
         # Determine how many enemies to spawn
         enemy_count = random.randint(*count_range)
 
+        is_antechamber = "antechamber" in room.name
+
         # Get safe spawn area
         spawn_area = self._get_safe_spawn_area(room.name, self.config.display_width)
 
         # Track rubble spawned in non-antechamber rooms (max 1)
-        is_antechamber = "antechamber" in room.name
         rubble_spawned = 0
 
         # Spawn enemies
@@ -85,6 +86,13 @@ class EnemySpawner:
                 rubble_sprites.add(entity)
             elif enemy_type == "priest":
                 priest_sprites.add(entity)
+                # Spawn an extra priest in antechambers
+                if is_antechamber:
+                    extra_priest = Priest(0, 0, room_id, self.config)
+                    ex, ey = self._random_position(spawn_area, extra_priest.radius)
+                    extra_priest.x = ex
+                    extra_priest.y = ey
+                    priest_sprites.add(extra_priest)
             elif enemy_type == "vision":
                 vision_sprites.add(entity)
 
@@ -162,11 +170,25 @@ class EnemySpawner:
                 weights=[40, 40, 20]
             )[0]
 
-        else:
-            # 30% rubble, 40% priest, 30% vision
+        elif difficulty < 6:
+            # 25% rubble, 50% priest, 25% vision
             return random.choices(
                 ["rubble", "priest", "vision"],
-                weights=[30, 40, 30]
+                weights=[25, 50, 25]
+            )[0]
+
+        elif difficulty < 8:
+            # 20% rubble, 55% priest, 25% vision
+            return random.choices(
+                ["rubble", "priest", "vision"],
+                weights=[20, 55, 25]
+            )[0]
+
+        else:
+            # 15% rubble, 60% priest, 25% vision
+            return random.choices(
+                ["rubble", "priest", "vision"],
+                weights=[15, 60, 25]
             )[0]
 
     def _get_safe_spawn_area(self, room_name, map_size):

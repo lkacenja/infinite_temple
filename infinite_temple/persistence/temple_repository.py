@@ -207,7 +207,7 @@ if __name__ == "__main__":
 
     if not temples:
         print("No temples found in repository.")
-        print(f"Generate temples with: python create_temple.py <word1> <word2> <word3>")
+        print("Generate temples from within the game.")
     else:
         print(f"Found {len(temples)} temple(s):\n")
         for i, temple in enumerate(temples, 1):

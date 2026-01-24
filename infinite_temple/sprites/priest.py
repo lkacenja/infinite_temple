@@ -25,8 +25,8 @@ class Priest(pygame.sprite.Sprite):
         self.state = "moving"  # moving, charging, firing
         self.move_speed = 1.5  # Slow movement
         self.state_timer = 0
-        self.move_duration = random.uniform(1.0, 2.0)  # Random 1-2 seconds
-        self.charge_duration = 1.0  # 1 second to charge
+        self.move_duration = random.uniform(0.5, 1.0)  # Random 0.5-1 seconds
+        self.charge_duration = 0.5  # 0.5 seconds to charge
 
         # Target tracking
         self.target_x = 0
@@ -85,6 +85,10 @@ class Priest(pygame.sprite.Sprite):
         elif self.state == "charging":
             # Charging happens independently of player movement
             self.state_timer += 1/60  # Assuming 60 FPS
+            # Track player through 80% of charge, then lock final position
+            if self.state_timer < self.charge_duration * 0.8:
+                self.target_x = player_x
+                self.target_y = player_y
             if self.state_timer >= self.charge_duration:
                 self.state = "firing"
                 self.state_timer = 0
@@ -93,7 +97,7 @@ class Priest(pygame.sprite.Sprite):
             # Transition back to moving immediately after firing
             self.state = "moving"
             self.state_timer = 0
-            self.move_duration = random.uniform(1.0, 2.0)  # New random duration
+            self.move_duration = random.uniform(0.5, 1.0)  # New random duration
 
         # Slowly rotate the priest
         self.dir += 0.5

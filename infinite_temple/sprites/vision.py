@@ -6,8 +6,8 @@ import pygame
 class Vision(pygame.sprite.Sprite):
     def __init__(self, x, y, room_id, config):
         pygame.sprite.Sprite.__init__(self)
-        # Random size: 4.5x to 10.5x player size
-        size_multiplier = random.uniform(4.5, 10.5)
+        # Random size: 3.6x to 8.4x player size
+        size_multiplier = random.uniform(3.6, 8.4)
         self.vision_size = config.player_size * size_multiplier
         self.surface = config.surface
         self.x = x
@@ -19,7 +19,7 @@ class Vision(pygame.sprite.Sprite):
         # Movement properties
         self.hspeed = 0
         self.vspeed = 0
-        self.move_speed = 0.5  # Slow movement toward player
+        self.move_speed = 1  # Movement toward player
         self.radius = self.vision_size
 
         # Pulsating properties
@@ -87,8 +87,8 @@ class Vision(pygame.sprite.Sprite):
                 dy = player_y - self.y
                 distance = math.sqrt(dx * dx + dy * dy)
 
-                # Only move if player is within 50 pixels
-                if distance > 0 and distance <= 50:
+                # Only move if player is within detection range
+                if distance > 0 and distance <= 250:
                     # Mark that we've started moving
                     if not self.has_started_moving:
                         self.has_started_moving = True

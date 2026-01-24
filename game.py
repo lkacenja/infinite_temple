@@ -569,7 +569,7 @@ def main():
                 # Check for death
                 if P1.current_health <= 0:
                     if death_timer == 0:
-                        play_explosion_sound(volume=0.7)
+                        play_explosion_sound(volume=0.56)
                     death_timer += dt
                     if death_timer >= DEATH_DELAY:
                         game_state = "game_over"
@@ -809,6 +809,23 @@ def main():
                 ammo_display.set_ammo(P1.ammo)
                 ammo_display.draw(config.surface)
 
+                # Draw help text in start room
+                if room_manager.current_room_id == 0:
+                    help_font = pygame.font.Font(None, 18)
+                    help_color = (180, 180, 180)
+
+                    # Controls - top left corner
+                    controls = [
+                        "CONTROLS",
+                        "Arrow Keys: Thrust/Rotate",
+                        "Double-tap: Snap 90°",
+                        "Space: Brake",
+                        "Shift: Fire (after collecting ammunition)"
+                    ]
+                    for i, line in enumerate(controls):
+                        text = help_font.render(line, True, help_color)
+                        config.surface.blit(text, (15, 60 + i * 16))
+
         elif game_state == "game_over":
             # Draw game over screen SVG
             if game_over_surface:
@@ -816,9 +833,22 @@ def main():
             else:
                 # Fallback if SVG doesn't load
                 render_text_fallback(config.surface, "GAME OVER", 72)
-                font = pygame.font.Font(None, 36)
-                press_space = font.render("Press SPACE to continue", True, (255, 255, 255))
-                draw_centered_surface(config.surface, press_space, y_offset=100)
+
+            # Overlay title with black background
+            title_font = pygame.font.Font(None, 32)
+            title_text = title_font.render("Crushed by the Weight of Time", True, (255, 255, 255))
+            title_rect = title_text.get_rect(center=(config.display_width // 2, 80))
+            bg_rect = title_rect.inflate(20, 10)
+            pygame.draw.rect(config.surface, (0, 0, 0), bg_rect)
+            config.surface.blit(title_text, title_rect)
+
+            # "Press space to try again" at bottom with black background
+            small_font = pygame.font.Font(None, 18)
+            press_text = small_font.render("Press space to try again", True, (255, 255, 255))
+            press_rect = press_text.get_rect(center=(config.display_width // 2, config.display_height - 50))
+            press_bg_rect = press_rect.inflate(20, 10)
+            pygame.draw.rect(config.surface, (0, 0, 0), press_bg_rect)
+            config.surface.blit(press_text, press_rect)
 
         # Update display
         pygame.display.update()
