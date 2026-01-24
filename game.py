@@ -13,7 +13,8 @@ from pygame.locals import *
 
 from infinite_temple.utility.ui import HealthBar, RoomProgressDisplay, AmmoDisplay
 from infinite_temple.utility.room import RoomManager, build_room_sequence, render_room
-from infinite_temple.utility.music import play_music_file
+from infinite_temple.utility.music import play_music_file, set_music_effect_level
+from infinite_temple.utility.difficulty import calculate_difficulty
 from infinite_temple.utility.collision import *
 from infinite_temple.utility.sfx import load_sound_effects, play_impact_sound, play_collapse_sound, play_priest_sound, play_vision_sound, play_explosion_sound
 from infinite_temple.sprites.player import Player
@@ -609,6 +610,10 @@ def main():
                         room_manager.last_entry_portal,
                         powerup_sprites
                     )
+
+                    # Update music effects based on difficulty
+                    difficulty = calculate_difficulty(room_manager.get_main_path_progress())
+                    set_music_effect_level(difficulty)
                 else:
                     # Only check collisions if we didn't transition
                     # Player-wall collision detection and response (BEFORE drawing to prevent tunneling)
